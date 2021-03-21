@@ -1,2 +1,3 @@
-#!/bin/bash
-exec $(dirname $0)/${STEP:-stepA_mal} "${@}"
+#!/usr/bin/env bash
+
+exec "$(dirname "$0")/${STEP:-stepA_mal}" "${@}"
