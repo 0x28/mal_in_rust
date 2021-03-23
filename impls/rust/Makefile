@@ -13,9 +13,9 @@ mal: stepA_mal
 	ln -sf target/release/$* $@
 
 STEP0_DEPS = Cargo.toml
-STEP1_DEPS = $(STEP0_DEPS) types.rs reader.rs printer.rs
-STEP3_DEPS = $(STEP1_DEPS) env.rs
-STEP4_DEPS = $(STEP3_DEPS) core.rs
+STEP1_DEPS = $(STEP0_DEPS) src/types.rs src/reader.rs src/printer.rs
+STEP3_DEPS = $(STEP1_DEPS) src/env.rs
+STEP4_DEPS = $(STEP3_DEPS) src/core.rs
 
 step0_repl: $(STEP0_DEPS)
 step1_read_print step2_eval: $(STEP1_DEPS)
