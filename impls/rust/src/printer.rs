@@ -53,29 +53,25 @@ fn pr_str_internal(
         MalType::Symbol(symbol) => {
             write!(writer, "{}", symbol)?;
         }
-        MalType::String(string) => {
-            if string.starts_with('\u{29E}') {
-                write!(
-                    writer,
-                    ":{}",
-                    string.chars().skip(1).collect::<String>()
-                )?;
-            } else if print_readably {
-                write!(writer, "\"")?;
-                for c in string.chars() {
-                    match c {
-                        '\n' => write!(writer, "\\n")?,
-                        '\t' => write!(writer, "\\t")?,
-                        '\r' => write!(writer, "\\r")?,
-                        '\\' => write!(writer, "\\\\")?,
-                        '\"' => write!(writer, "\\\"")?,
-                        c => write!(writer, "{}", c)?,
-                    }
+        MalType::String(keyword) if keyword.starts_with('\u{29E}') => {
+            write!(writer, ":{}", keyword.chars().skip(1).collect::<String>())?;
+        }
+        MalType::String(string) if print_readably => {
+            write!(writer, "\"")?;
+            for c in string.chars() {
+                match c {
+                    '\n' => write!(writer, "\\n")?,
+                    '\t' => write!(writer, "\\t")?,
+                    '\r' => write!(writer, "\\r")?,
+                    '\\' => write!(writer, "\\\\")?,
+                    '\"' => write!(writer, "\\\"")?,
+                    c => write!(writer, "{}", c)?,
                 }
-                write!(writer, "\"")?;
-            } else {
-                write!(writer, "\"{}\"", string)?;
             }
+            write!(writer, "\"")?;
+        }
+        MalType::String(string) => {
+            write!(writer, "\"{}\"", string)?;
         }
         MalType::Boolean(true) => {
             write!(writer, "true")?;
