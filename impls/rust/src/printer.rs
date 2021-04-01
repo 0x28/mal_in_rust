@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::fmt::{Display, Write};
 
 use crate::types::MalType;
 
@@ -82,7 +82,16 @@ fn pr_str_internal(
         MalType::Nil => {
             write!(writer, "nil")?;
         }
+        MalType::Fn(f) => {
+            write!(writer, "{}", f)?;
+        }
     }
 
     Ok(())
+}
+
+impl Display for MalType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        pr_str_internal(self, f, true)
+    }
 }

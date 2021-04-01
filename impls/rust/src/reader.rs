@@ -1,8 +1,9 @@
 use super::types::MalType;
-use std::{
-    collections::HashMap, error::Error, fmt::Display, iter::Peekable,
-    slice::Iter,
-};
+use std::collections::HashMap;
+use std::error::Error;
+use std::fmt::Display;
+use std::iter::Peekable;
+use std::slice::Iter;
 
 type Reader<'a> = Peekable<Iter<'a, String>>;
 
