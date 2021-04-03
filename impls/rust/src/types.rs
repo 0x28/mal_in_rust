@@ -34,21 +34,21 @@ impl PartialEq for MalFunc {
     }
 }
 
-pub type Env = HashMap<String, MalType>;
-
 pub enum EvalError {
     UnknownVariable(String),
     TypeMismatch(String, String),
     ArityMismatch(String, usize),
     DivisionByZero,
     ExpectedFunction(String),
+    ExpectedSymbol(String),
+    InvalidLetBinding,
 }
 
 impl Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             EvalError::UnknownVariable(var) => {
-                write!(f, "Undefined variable '{}'", var)
+                write!(f, "Variable '{}' not found", var)
             }
             EvalError::TypeMismatch(func, t) => {
                 write!(f, "Function '{}' expects type '{}'", func, t)
@@ -65,6 +65,13 @@ impl Display for EvalError {
                     "Expected function in call position found '{}'",
                     actual
                 )
+            }
+            EvalError::ExpectedSymbol(actual) => {
+                write!(f, "Expected symbol found '{}'", actual)
+            }
+            EvalError::InvalidLetBinding => {
+                write!(f, "let* binding not of the form \
+                           (let* (<symbol> <expr> ...) <expr>)")
             }
         }
     }
