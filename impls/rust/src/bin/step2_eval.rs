@@ -1,4 +1,4 @@
-use mal::funcs::{div, minus, mul, plus};
+use mal::core::{div, minus, mul, plus};
 use mal::reader;
 use mal::types::{EvalError, MalType};
 use mal::{printer::pr_str, types::MalFunc};
