@@ -1,38 +1,42 @@
 use super::types::MalType;
 use crate::types::EvalError;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
+
+pub type EnvRef = Rc<Env>;
 
 #[derive(Debug)]
-pub struct Env<'e> {
-    outer: Option<&'e Env<'e>>,
-    data: HashMap<String, MalType>,
+pub struct Env {
+    outer: Option<EnvRef>,
+    data: RefCell<HashMap<String, MalType>>,
 }
 
-impl Env<'_> {
-    pub fn new<'e>(outer: Option<&'e Env>) -> Env<'e> {
+impl Env {
+    pub fn new(outer: Option<EnvRef>) -> Env {
         Env {
             outer,
-            data: HashMap::new(),
+            data: RefCell::new(HashMap::new()),
         }
     }
 
     fn find(&self, key: &str) -> Option<&Self> {
-        match (self.data.get(key), &self.outer) {
+        match (self.data.borrow().get(key), &self.outer) {
             (Some(_), _) => Some(self),
             (None, Some(scope)) => scope.find(key),
             (None, None) => None,
         }
     }
 
-    pub fn get(&self, key: &str) -> Result<&MalType, EvalError> {
+    pub fn get(&self, key: &str) -> Result<MalType, EvalError> {
         match self.find(key) {
-            Some(env) => Ok(&env.data[key]),
+            Some(env) => Ok(env.data.borrow()[key].clone()),
             None => Err(EvalError::UnknownVariable(key.to_string())),
         }
     }
 
-    pub fn set(&mut self, key: &str, value: MalType) {
-        self.data.insert(key.to_string(), value);
+    pub fn set(&self, key: &str, value: MalType) {
+        self.data.borrow_mut().insert(key.to_string(), value);
     }
 }

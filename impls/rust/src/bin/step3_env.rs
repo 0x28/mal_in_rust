@@ -1,5 +1,5 @@
-use mal::env::Env;
 use mal::core::{div, minus, mul, plus};
+use mal::env::{Env, EnvRef};
 use mal::reader;
 use mal::types::{EvalError, MalType};
 use mal::{printer::pr_str, types::MalFunc};
@@ -19,28 +19,25 @@ fn read(input: &str) -> Option<MalType> {
     }
 }
 
-fn eval_ast(ast: MalType, env: &mut Env) -> Result<MalType, EvalError> {
+fn eval_ast(ast: MalType, env: EnvRef) -> Result<MalType, EvalError> {
     match ast {
-        MalType::Symbol(symbol) => {
-            let value = env.get(&symbol)?;
-            Ok(value.clone())
-        }
+        MalType::Symbol(symbol) => Ok(env.get(&symbol)?),
         MalType::List(list) => {
             let evaluated: Result<Vec<_>, _> =
-                list.into_iter().map(|e| eval(e, env)).collect();
+                list.into_iter().map(|e| eval(e, Rc::clone(&env))).collect();
 
             Ok(MalType::List(evaluated?))
         }
         MalType::Vector(vec) => {
             let evaluated: Result<Vec<_>, _> =
-                vec.into_iter().map(|e| eval(e, env)).collect();
+                vec.into_iter().map(|e| eval(e, Rc::clone(&env))).collect();
 
             Ok(MalType::Vector(evaluated?))
         }
         MalType::Map(map) => {
             let evaluated: Result<HashMap<_, _>, _> = map
                 .into_iter()
-                .map(|(key, val)| Ok((key, eval(val, env)?)))
+                .map(|(key, val)| Ok((key, eval(val, Rc::clone(&env))?)))
                 .collect();
 
             Ok(MalType::Map(evaluated?))
@@ -56,10 +53,10 @@ fn apply(func: &MalType, args: &[MalType]) -> Result<MalType, EvalError> {
     }
 }
 
-fn apply_def(args: &[MalType], env: &mut Env) -> Result<MalType, EvalError> {
+fn apply_def(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
     match &args {
         [MalType::Symbol(name), expr] => {
-            let value = eval(expr.clone(), env)?;
+            let value = eval(expr.clone(), Rc::clone(&env))?;
             env.set(name, value.clone());
             Ok(value)
         }
@@ -68,8 +65,8 @@ fn apply_def(args: &[MalType], env: &mut Env) -> Result<MalType, EvalError> {
     }
 }
 
-fn apply_let(args: &[MalType], env: &Env) -> Result<MalType, EvalError> {
-    let mut local_env = Env::new(Some(env));
+fn apply_let(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
+    let local_env = Rc::new(Env::new(Some(env)));
 
     match &args {
         &[MalType::List(bindings), _] if bindings.len() % 2 != 0 => {
@@ -80,19 +77,19 @@ fn apply_let(args: &[MalType], env: &Env) -> Result<MalType, EvalError> {
             for binding in bindings.chunks_exact(2) {
                 if let (MalType::Symbol(sym), expr) = (&binding[0], &binding[1])
                 {
-                    let value = eval(expr.clone(), &mut local_env)?;
+                    let value = eval(expr.clone(), Rc::clone(&local_env))?;
                     local_env.set(sym, value);
                 } else {
                     return Err(EvalError::InvalidLetBinding);
                 }
             }
-            eval(body.clone(), &mut local_env)
+            eval(body.clone(), local_env)
         }
         _ => Err(EvalError::ArityMismatch("let*".to_string(), 2)),
     }
 }
 
-fn eval(ast: MalType, env: &mut Env) -> Result<MalType, EvalError> {
+fn eval(ast: MalType, env: EnvRef) -> Result<MalType, EvalError> {
     match ast {
         MalType::List(ref list) if list.is_empty() => Ok(ast),
         MalType::List(list) => match &list[0] {
@@ -115,7 +112,7 @@ fn print(ast: &MalType) -> String {
     pr_str(ast, true)
 }
 
-fn rep(line: &str, env: &mut Env) -> String {
+fn rep(line: &str, env: EnvRef) -> String {
     match read(line) {
         Some(ast) => match eval(ast, env) {
             Ok(value) => print(&value),
@@ -135,7 +132,7 @@ fn prompt() {
 
 fn main() {
     let stdin = io::stdin();
-    let mut env = Env::new(None);
+    let env = Rc::new(Env::new(None));
 
     env.set("+", MalType::Fn(MalFunc(Rc::new(plus))));
     env.set("*", MalType::Fn(MalFunc(Rc::new(mul))));
@@ -144,7 +141,7 @@ fn main() {
 
     prompt();
     for line in stdin.lock().lines() {
-        println!("{}", rep(&line.unwrap(), &mut env));
+        println!("{}", rep(&line.unwrap(), Rc::clone(&env)));
         prompt();
     }
 }
