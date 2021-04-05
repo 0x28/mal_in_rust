@@ -71,7 +71,7 @@ fn pr_str_internal(
             write!(writer, "\"")?;
         }
         MalType::String(string) => {
-            write!(writer, "\"{}\"", string)?;
+            write!(writer, "{}", string)?;
         }
         MalType::Boolean(true) => {
             write!(writer, "true")?;
