@@ -85,6 +85,9 @@ fn pr_str_internal(
         MalType::Fn(f) => {
             write!(writer, "{}", f)?;
         }
+        MalType::FnTco(f) => {
+            write!(writer, "{}", f)?;
+        }
     }
 
     Ok(())

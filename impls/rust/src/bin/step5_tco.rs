@@ -1,7 +1,7 @@
-use mal::core::NAMESPACE;
 use mal::env::{Env, EnvRef};
 use mal::reader;
 use mal::types::{EvalError, MalType};
+use mal::{core::NAMESPACE, types::TailCallFn};
 use mal::{printer::pr_str, types::MalFunc};
 use reader::ReaderError;
 
@@ -46,13 +46,6 @@ fn eval_ast(ast: MalType, env: EnvRef) -> Result<MalType, EvalError> {
     }
 }
 
-fn apply(func: &MalType, args: &[MalType]) -> Result<MalType, EvalError> {
-    match func {
-        MalType::Fn(f) => f.0(args),
-        _ => Err(EvalError::ExpectedFunction(format!("{}", func))),
-    }
-}
-
 fn apply_def(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
     match &args {
         [MalType::Symbol(name), expr] => {
@@ -65,7 +58,10 @@ fn apply_def(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
     }
 }
 
-fn apply_let(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
+fn apply_let(
+    args: &[MalType],
+    env: EnvRef,
+) -> Result<(MalType, EnvRef), EvalError> {
     let local_env = Rc::new(Env::new(Some(env)));
 
     match &args {
@@ -83,22 +79,25 @@ fn apply_let(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
                     return Err(EvalError::InvalidLetBinding);
                 }
             }
-            eval(body.clone(), local_env)
+            Ok((body.clone(), local_env))
         }
         _ => Err(EvalError::ArityMismatch("let*".to_string(), 2)),
     }
 }
 
-fn apply_do(exprs: Vec<MalType>, env: EnvRef) -> Result<MalType, EvalError> {
-    let values: Result<Vec<_>, _> = exprs
-        .into_iter()
-        .skip(1)
-        .map(|v| eval(v, Rc::clone(&env)))
-        .collect();
+fn apply_do(
+    mut exprs: Vec<MalType>,
+    env: EnvRef,
+) -> Result<MalType, EvalError> {
+    if exprs.len() == 1 {
+        Err(EvalError::EmptyDo)
+    } else {
+        let last = exprs.remove(exprs.len() - 1);
+        for expr in exprs.into_iter().skip(1) {
+            eval(expr, Rc::clone(&env))?;
+        }
 
-    match values?.into_iter().last() {
-        Some(value) => Ok(value),
-        None => Err(EvalError::EmptyDo),
+        Ok(last)
     }
 }
 
@@ -111,8 +110,8 @@ fn apply_if(exprs: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
         };
 
         match (cond, rest) {
-            (true, _) => eval(then_branch.clone(), env),
-            (false, [else_branch]) => eval(else_branch.clone(), env),
+            (true, _) => Ok(then_branch.clone()),
+            (false, [else_branch]) => Ok(else_branch.clone()),
             (false, []) => Ok(MalType::Nil),
             _ => Err(EvalError::ArityMismatchRange("if".to_string(), 2, 3)),
         }
@@ -147,6 +146,9 @@ fn apply_lambda(
         .collect();
 
     let parameters = parameters.ok_or(EvalError::InvalidFnBinding)?;
+    let tco_body = body.clone();
+    let tco_parameters = parameters.clone();
+    let tco_env = Rc::clone(&env);
 
     let lambda = move |args: &[MalType]| {
         let local_env = Env::from_bindings(
@@ -158,28 +160,67 @@ fn apply_lambda(
         eval(body.clone(), Rc::new(local_env))
     };
 
-    Ok(MalType::Fn(MalFunc(Rc::new(lambda))))
+    let fun = MalFunc(Rc::new(lambda));
+    Ok(MalType::FnTco(Rc::new(TailCallFn {
+        ast: tco_body,
+        params: tco_parameters,
+        env: tco_env,
+        fun,
+    })))
 }
 
-fn eval(ast: MalType, env: EnvRef) -> Result<MalType, EvalError> {
-    match ast {
-        MalType::List(ref list) if list.is_empty() => Ok(ast),
-        MalType::List(list) => match &list[0] {
-            MalType::Symbol(sym) if sym == "def!" => apply_def(&list[1..], env),
-            MalType::Symbol(sym) if sym == "let*" => apply_let(&list[1..], env),
-            MalType::Symbol(sym) if sym == "do" => apply_do(list, env),
-            MalType::Symbol(sym) if sym == "if" => apply_if(&list[1..], env),
-            MalType::Symbol(sym) if sym == "fn*" => apply_lambda(list, env),
-            _ => {
-                if let MalType::List(call) = eval_ast(MalType::List(list), env)?
-                {
-                    apply(&call[0], &call[1..])
-                } else {
-                    panic!("Eval of a list didn't result in a list!")
+fn eval(mut ast: MalType, mut env: EnvRef) -> Result<MalType, EvalError> {
+    loop {
+        match ast {
+            MalType::List(ref list) if list.is_empty() => return Ok(ast),
+            MalType::List(list) => match &list[0] {
+                MalType::Symbol(sym) if sym == "def!" => {
+                    return apply_def(&list[1..], env);
                 }
-            }
-        },
-        _ => eval_ast(ast, env),
+                MalType::Symbol(sym) if sym == "let*" => {
+                    let (let_ast, let_env) = apply_let(&list[1..], env)?;
+                    ast = let_ast;
+                    env = let_env;
+                }
+                MalType::Symbol(sym) if sym == "do" => {
+                    ast = apply_do(list, Rc::clone(&env))?;
+                }
+                MalType::Symbol(sym) if sym == "if" => {
+                    ast = apply_if(&list[1..], Rc::clone(&env))?;
+                }
+                MalType::Symbol(sym) if sym == "fn*" => {
+                    return apply_lambda(list, env);
+                }
+                _ => {
+                    let call = match eval_ast(MalType::List(list), env)? {
+                        MalType::List(c) => c,
+                        _ => unreachable!(),
+                    };
+
+                    match call.as_slice() {
+                        [MalType::Fn(f), args @ ..] => {
+                            return f.0(args);
+                        }
+                        [MalType::FnTco(f), args @ ..] => {
+                            ast = f.ast.clone();
+                            env = Rc::new(Env::from_bindings(
+                                Some(Rc::clone(&f.env)),
+                                f.params.clone(),
+                                args.to_vec(),
+                            )?)
+                        }
+                        [value, ..] => {
+                            return Err(EvalError::ExpectedFunction(format!(
+                                "{}",
+                                value
+                            )));
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+            },
+            _ => return eval_ast(ast, env),
+        }
     }
 }
 

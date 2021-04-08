@@ -1,5 +1,7 @@
 use std::{collections::HashMap, fmt::Display, rc::Rc};
 
+use crate::env::EnvRef;
+
 #[derive(Clone, Debug)]
 pub enum MalType {
     Nil,
@@ -7,6 +9,7 @@ pub enum MalType {
     Vector(Vec<MalType>),
     Map(HashMap<String, MalType>),
     Fn(MalFunc),
+    FnTco(Rc<TailCallFn>),
     Integer(i64),
     Symbol(String),
     String(String),
@@ -29,6 +32,26 @@ impl PartialEq for MalType {
             (MalType::Vector(l), MalType::List(r)) => l == r,
             _ => false,
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct TailCallFn {
+    pub ast: MalType,
+    pub params: Vec<String>,
+    pub env: EnvRef,
+    pub fun: MalFunc,
+}
+
+impl std::fmt::Debug for TailCallFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.fun)
+    }
+}
+
+impl std::fmt::Display for TailCallFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.fun)
     }
 }
 
