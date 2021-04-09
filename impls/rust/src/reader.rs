@@ -15,7 +15,6 @@ pub enum ReaderError {
     UnbalancedString(String),
     InvalidInteger(String),
     InvalidMapKey,
-    Comment,
 }
 
 impl Display for ReaderError {
@@ -39,7 +38,6 @@ impl Display for ReaderError {
             ReaderError::InvalidMapKey => {
                 write!(f, "Only strings and keywords can be used in maps.")?;
             }
-            ReaderError::Comment => (),
         }
 
         Ok(())
@@ -66,7 +64,6 @@ fn read_form(reader: &mut Reader) -> Result<MalType, ReaderError> {
             "~@" => wrap_form("splice-unquote", reader),
             "@" => wrap_form("deref", reader),
             "^" => wrap_with_meta(reader),
-            ";" => Err(ReaderError::Comment),
             _ => read_atom(reader),
         }
     } else {
@@ -232,7 +229,6 @@ fn tokenize(input: &str) -> Result<Vec<String>, ReaderError> {
                         stream.next();
                     }
                 }
-                token.push(";".to_string());
             }
             ',' => {
                 stream.next();

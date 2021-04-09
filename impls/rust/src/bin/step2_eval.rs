@@ -2,7 +2,6 @@ use mal::core::{div, minus, mul, plus};
 use mal::reader;
 use mal::types::{EvalError, MalType};
 use mal::{printer::pr_str, types::MalFunc};
-use reader::ReaderError;
 use std::io::{self, BufRead, Write};
 use std::{collections::HashMap, rc::Rc};
 
@@ -11,7 +10,6 @@ type Env = HashMap<String, MalType>;
 fn read(input: &str) -> Option<MalType> {
     match reader::read_str(input) {
         Ok(ast) => Some(ast),
-        Err(ReaderError::Comment) => None,
         Err(e) => {
             eprintln!("Error: {}", e);
             None

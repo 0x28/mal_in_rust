@@ -1,12 +1,10 @@
 use mal::types::MalType;
 use mal::{printer::pr_str, reader};
-use reader::ReaderError;
 use std::io::{self, BufRead, Write};
 
 fn read(input: &str) -> Option<MalType> {
     match reader::read_str(input) {
         Ok(ast) => Some(ast),
-        Err(ReaderError::Comment) => None,
         Err(e) => {
             eprintln!("Error: {}", e);
             None
