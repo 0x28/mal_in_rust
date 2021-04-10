@@ -88,6 +88,9 @@ fn pr_str_internal(
         MalType::FnTco(f) => {
             write!(writer, "{}", f)?;
         }
+        MalType::Atom(value) => {
+            write!(writer, "(atom {})", value)?;
+        }
     }
 
     Ok(())

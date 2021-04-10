@@ -103,4 +103,8 @@ impl Env {
         data.insert(key.to_string(), value);
         self.data.set(data);
     }
+
+    pub fn clear(&self) {
+        self.data.take().clear()
+    }
 }

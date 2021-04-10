@@ -4,8 +4,11 @@ use mal::types::{EvalError, MalType};
 use mal::{core::NAMESPACE, types::TailCallFn};
 use mal::{printer::pr_str, types::MalFunc};
 
-use std::io::{self, BufRead, Write};
 use std::{collections::HashMap, rc::Rc};
+use std::{
+    env,
+    io::{self, BufRead, Write},
+};
 
 fn read(input: &str) -> Option<MalType> {
     match reader::read_str(input) {
@@ -247,18 +250,77 @@ fn prompt() {
 fn main() {
     let stdin = io::stdin();
     let env = Rc::new(Env::new(None));
+    let exit_code;
 
     for (name, func) in NAMESPACE {
         env.set(name, MalType::Fn(MalFunc(Rc::new(func))));
     }
 
+    let eval_env = Rc::clone(&env);
+    let eval_func = move |args: &[MalType]| {
+        if let [arg] = args {
+            eval(arg.clone(), Rc::clone(&eval_env))
+        } else {
+            Err(EvalError::ArityMismatch("eval".to_string(), 1))
+        }
+    };
+
+    env.set("eval", MalType::Fn(MalFunc(Rc::new(eval_func))));
+
     rep("(def! not (fn* (a) (if a false true)))", Rc::clone(&env));
-    prompt();
-    for line in stdin.lock().lines() {
-        println!("{}", rep(&line.unwrap(), Rc::clone(&env)));
-        prompt();
+    rep(
+        r#"
+(def! load-file
+  (fn* (f)
+    (eval (read-string (str "(do " (slurp f) "\nnil)")))))
+"#,
+        Rc::clone(&env),
+    );
+
+    let cli_args: Vec<_> = env::args().collect();
+
+    match cli_args.as_slice() {
+        [_prog_name, mal_file, argv @ ..] => {
+            env.set(
+                "*ARGV*",
+                MalType::List(
+                    argv.iter()
+                        .map(|s| MalType::String(s.to_string()))
+                        .collect(),
+                ),
+            );
+            // use eval instead of rep to avoid injection
+            let result = eval(
+                MalType::List(vec![
+                    MalType::Symbol("load-file".to_string()),
+                    MalType::String(mal_file.to_string()),
+                ]),
+                Rc::clone(&env),
+            );
+
+            match result {
+                Err(e) => {
+                    eprintln!("Couldn't load file '{}': {}", mal_file, e);
+                    exit_code = 1;
+                }
+                _ => exit_code = 0,
+            }
+        }
+        _ => {
+            env.set("*ARGV*", MalType::List(vec![]));
+
+            prompt();
+            for line in stdin.lock().lines() {
+                println!("{}", rep(&line.unwrap(), Rc::clone(&env)));
+                prompt();
+            }
+
+            exit_code = 0;
+        }
     }
 
     // prevent leaks because of reference cycle
     env.clear();
+
+    std::process::exit(exit_code);
 }

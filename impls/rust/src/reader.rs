@@ -27,7 +27,7 @@ impl Display for ReaderError {
                 write!(f, "Invalid escape sequence '\\{}'.", c)?;
             }
             ReaderError::UnbalancedString(string) => {
-                write!(f, "Found unbalanced string \"{}...", string)?;
+                write!(f, "Found unbalanced string {}...", string)?;
             }
             ReaderError::UnexpectedEof => {
                 write!(f, "Unexpected EOF.")?;

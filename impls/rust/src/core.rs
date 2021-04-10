@@ -1,6 +1,7 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, fs, path::PathBuf};
 
-use crate::printer;
+use crate::reader;
+use crate::{printer, types::MalAtom};
 
 use super::types::{EvalError, MalType};
 
@@ -196,6 +197,97 @@ fn println(args: &[MalType]) -> Result<MalType, EvalError> {
     Ok(MalType::Nil)
 }
 
+fn read_string(args: &[MalType]) -> Result<MalType, EvalError> {
+    let fn_name = String::from("read-string");
+    match args {
+        [MalType::String(string)] => {
+            reader::read_str(string).map_err(EvalError::ReaderError)
+        }
+        [_] => Err(EvalError::TypeMismatch(fn_name, "string".to_string())),
+        _ => Err(EvalError::ArityMismatch(fn_name, 1)),
+    }
+}
+
+fn slurp(args: &[MalType]) -> Result<MalType, EvalError> {
+    let fn_name = String::from("slurp");
+    match args {
+        [MalType::String(string)] => fs::read_to_string(PathBuf::from(string))
+            .map(MalType::String)
+            .map_err(EvalError::InOutError),
+        [_] => Err(EvalError::TypeMismatch(fn_name, "string".to_string())),
+        _ => Err(EvalError::ArityMismatch(fn_name, 1)),
+    }
+}
+
+fn atom(args: &[MalType]) -> Result<MalType, EvalError> {
+    if let [arg] = args {
+        Ok(MalType::Atom(MalAtom::new(arg.clone())))
+    } else {
+        Err(EvalError::ArityMismatch("atom".to_string(), 1))
+    }
+}
+
+fn is_atom(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::Atom(_)] => Ok(MalType::Boolean(true)),
+        [_] => Ok(MalType::Boolean(false)),
+        _ => Err(EvalError::ArityMismatch("atom?".to_string(), 1)),
+    }
+}
+
+fn deref(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::Atom(atom)] => Ok(atom.deref()),
+        [_] => Err(EvalError::TypeMismatch(
+            "deref".to_string(),
+            "atom".to_string(),
+        )),
+        _ => Err(EvalError::ArityMismatch("deref".to_string(), 1)),
+    }
+}
+
+fn reset(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::Atom(atom), value] => {
+            atom.reset(value.clone());
+            Ok(value.clone())
+        }
+        [_] => Err(EvalError::TypeMismatch(
+            "reset!".to_string(),
+            "atom".to_string(),
+        )),
+        _ => Err(EvalError::ArityMismatch("reset!".to_string(), 2)),
+    }
+}
+
+fn swap(args: &[MalType]) -> Result<MalType, EvalError> {
+    let swap_name = String::from("swap!");
+
+    match args {
+        [MalType::Atom(atom), MalType::Fn(fun), rest @ ..] => {
+            let mut new_args = vec![atom.deref()];
+            new_args.append(&mut rest.to_vec());
+
+            let result = fun.0(&new_args)?;
+            atom.reset(result.clone());
+            Ok(result)
+        }
+        [MalType::Atom(atom), MalType::FnTco(tco_fun), rest @ ..] => {
+            let mut new_args = vec![atom.deref()];
+            new_args.append(&mut rest.to_vec());
+
+            let result = tco_fun.fun.0(&new_args)?;
+            atom.reset(result.clone());
+            Ok(result)
+        }
+        [_, _, ..] => Err(EvalError::TypeMismatchMultiple(
+            swap_name,
+            vec!["atom".to_string(), "function".to_string()],
+        )),
+        _ => Err(EvalError::ArityMismatchRange(swap_name, 2, usize::MAX)),
+    }
+}
+
 type Namespace =
     &'static [(&'static str, fn(&[MalType]) -> Result<MalType, EvalError>)];
 
@@ -217,4 +309,11 @@ pub const NAMESPACE: Namespace = &[
     ("pr-str", pr_str),
     ("str", str),
     ("println", println),
+    ("read-string", read_string),
+    ("slurp", slurp),
+    ("atom", atom),
+    ("atom?", is_atom),
+    ("deref", deref),
+    ("reset!", reset),
+    ("swap!", swap),
 ];

@@ -1,6 +1,11 @@
-use std::{collections::HashMap, fmt::Display, rc::Rc};
+use std::cell::Cell;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::io;
+use std::rc::Rc;
 
-use crate::env::EnvRef;
+use crate::{env::EnvRef, reader::ReaderError};
 
 #[derive(Clone, Debug)]
 pub enum MalType {
@@ -14,6 +19,7 @@ pub enum MalType {
     Symbol(String),
     String(String),
     Boolean(bool),
+    Atom(MalAtom),
 }
 
 impl PartialEq for MalType {
@@ -32,6 +38,12 @@ impl PartialEq for MalType {
             (MalType::Vector(l), MalType::List(r)) => l == r,
             _ => false,
         }
+    }
+}
+
+impl Default for MalType {
+    fn default() -> Self {
+        MalType::Nil
     }
 }
 
@@ -76,9 +88,57 @@ impl PartialEq for MalFunc {
     }
 }
 
+pub struct MalAtom {
+    value: Rc<Cell<MalType>>,
+}
+
+impl MalAtom {
+    pub fn new(value: MalType) -> MalAtom {
+        MalAtom {
+            value: Rc::new(Cell::new(value)),
+        }
+    }
+
+    pub fn deref(&self) -> MalType {
+        let value = self.value.take();
+        self.value.set(value.clone());
+        value
+    }
+
+    pub fn reset(&self, value: MalType) {
+        self.value.set(value);
+    }
+}
+
+impl Display for MalAtom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = self.value.take();
+        let result = write!(f, "{}", value);
+        self.value.set(value);
+
+        result
+    }
+}
+
+impl Debug for MalAtom {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+impl Clone for MalAtom {
+    fn clone(&self) -> Self {
+        MalAtom {
+            value: Rc::clone(&self.value),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum EvalError {
     UnknownVariable(String),
     TypeMismatch(String, String),
+    TypeMismatchMultiple(String, Vec<String>),
     ArityMismatch(String, usize),
     ArityMismatchRange(String, usize, usize),
     DivisionByZero,
@@ -87,6 +147,8 @@ pub enum EvalError {
     InvalidLetBinding,
     InvalidFnBinding,
     EmptyDo,
+    ReaderError(ReaderError),
+    InOutError(io::Error),
 }
 
 impl Display for EvalError {
@@ -97,6 +159,18 @@ impl Display for EvalError {
             }
             EvalError::TypeMismatch(func, t) => {
                 write!(f, "Function '{}' expects type '{}'", func, t)
+            }
+            EvalError::TypeMismatchMultiple(func, types) => {
+                write!(
+                    f,
+                    "Function '{}' expects the argument types {}",
+                    func,
+                    types
+                        .iter()
+                        .map(|s| format!("'{}'", s))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             }
             EvalError::ArityMismatch(func, count) => {
                 write!(f, "Function '{}' expects {} argument(s)", func, count)
@@ -133,7 +207,7 @@ impl Display for EvalError {
                 write!(
                     f,
                     "let* binding not of the form \
-                           (let* (<symbol> <expr> ...) <expr>)"
+                     (let* (<symbol> <expr> ...) <expr>)"
                 )
             }
             EvalError::InvalidFnBinding => {
@@ -145,6 +219,12 @@ impl Display for EvalError {
             }
             EvalError::EmptyDo => {
                 write!(f, "do should at least contain one expression")
+            }
+            EvalError::ReaderError(err) => {
+                write!(f, "{}", err)
+            }
+            EvalError::InOutError(err) => {
+                write!(f, "{}", err)
             }
         }
     }
