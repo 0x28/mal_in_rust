@@ -288,6 +288,56 @@ fn swap(args: &[MalType]) -> Result<MalType, EvalError> {
     }
 }
 
+fn cons(args: &[MalType]) -> Result<MalType, EvalError> {
+    let cons_name = String::from("cons");
+
+    match args {
+        [value, MalType::List(list)] | [value, MalType::Vector(list)] => {
+            let mut new_list = vec![value.clone()];
+            new_list.extend_from_slice(list);
+
+            Ok(MalType::List(new_list))
+        }
+        [_, _] => Err(EvalError::TypeMismatchMultiple(
+            cons_name,
+            vec!["any".to_string(), "list".to_string()],
+        )),
+        _ => Err(EvalError::ArityMismatch(cons_name, 2)),
+    }
+}
+
+fn concat(args: &[MalType]) -> Result<MalType, EvalError> {
+    let mut list = vec![];
+
+    for arg in args {
+        match arg {
+            MalType::List(other) | MalType::Vector(other) => {
+                list.extend_from_slice(other)
+            }
+            _ => {
+                return Err(EvalError::TypeMismatch(
+                    "concat".to_string(),
+                    "list".to_string(),
+                ))
+            }
+        }
+    }
+
+    Ok(MalType::List(list))
+}
+
+fn vec(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::List(list)] => Ok(MalType::Vector(list.clone())),
+        [MalType::Vector(vec)] => Ok(MalType::Vector(vec.clone())),
+        [_] => Err(EvalError::TypeMismatch(
+            "vec".to_string(),
+            "list | vector".to_string(),
+        )),
+        _ => Err(EvalError::ArityMismatch("vec".to_string(), 1)),
+    }
+}
+
 type Namespace =
     &'static [(&'static str, fn(&[MalType]) -> Result<MalType, EvalError>)];
 
@@ -316,4 +366,7 @@ pub const NAMESPACE: Namespace = &[
     ("deref", deref),
     ("reset!", reset),
     ("swap!", swap),
+    ("cons", cons),
+    ("concat", concat),
+    ("vec", vec),
 ];
