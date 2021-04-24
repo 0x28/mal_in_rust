@@ -85,7 +85,7 @@ fn pr_str_internal(
         MalType::Fn(f) => {
             write!(writer, "{}", f)?;
         }
-        MalType::FnTco(f) => {
+        MalType::FnUser(f) => {
             write!(writer, "{}", f)?;
         }
         MalType::Atom(value) => {

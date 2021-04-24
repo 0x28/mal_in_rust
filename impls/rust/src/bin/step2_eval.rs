@@ -1,7 +1,7 @@
 use mal::core::{div, minus, mul, plus};
 use mal::reader;
 use mal::types::{EvalError, MalType};
-use mal::{printer::pr_str, types::MalFunc};
+use mal::{printer::pr_str, types::InternalFn};
 use std::io::{self, BufRead, Write};
 use std::{collections::HashMap, rc::Rc};
 
@@ -96,10 +96,10 @@ fn main() {
     let stdin = io::stdin();
     let mut env = HashMap::new();
 
-    env.insert("+".to_string(), MalType::Fn(MalFunc(Rc::new(plus))));
-    env.insert("*".to_string(), MalType::Fn(MalFunc(Rc::new(mul))));
-    env.insert("-".to_string(), MalType::Fn(MalFunc(Rc::new(minus))));
-    env.insert("/".to_string(), MalType::Fn(MalFunc(Rc::new(div))));
+    env.insert("+".to_string(), MalType::Fn(InternalFn(Rc::new(plus))));
+    env.insert("*".to_string(), MalType::Fn(InternalFn(Rc::new(mul))));
+    env.insert("-".to_string(), MalType::Fn(InternalFn(Rc::new(minus))));
+    env.insert("/".to_string(), MalType::Fn(InternalFn(Rc::new(div))));
 
     prompt();
     for line in stdin.lock().lines() {

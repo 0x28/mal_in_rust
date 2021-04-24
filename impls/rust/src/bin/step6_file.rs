@@ -1,8 +1,8 @@
 use mal::env::{Env, EnvRef};
 use mal::reader;
 use mal::types::{EvalError, MalType};
-use mal::{core::NAMESPACE, types::TailCallFn};
-use mal::{printer::pr_str, types::MalFunc};
+use mal::{core::NAMESPACE, types::UserFn};
+use mal::{printer::pr_str, types::InternalFn};
 
 use std::{collections::HashMap, rc::Rc};
 use std::{
@@ -161,8 +161,8 @@ fn apply_lambda(
         eval(body.clone(), Rc::new(local_env))
     };
 
-    let fun = MalFunc(Rc::new(lambda));
-    Ok(MalType::FnTco(Rc::new(TailCallFn::new(
+    let fun = InternalFn(Rc::new(lambda));
+    Ok(MalType::FnUser(Rc::new(UserFn::new(
         tco_body,
         tco_parameters,
         tco_env,
@@ -202,7 +202,7 @@ fn eval(mut ast: MalType, mut env: EnvRef) -> Result<MalType, EvalError> {
                         [MalType::Fn(f), args @ ..] => {
                             return f.0(args);
                         }
-                        [MalType::FnTco(f), args @ ..] => {
+                        [MalType::FnUser(f), args @ ..] => {
                             ast = f.ast.clone();
                             env = Rc::new(Env::from_bindings(
                                 Some(Rc::clone(&f.env)),
@@ -253,7 +253,7 @@ fn main() {
     let exit_code;
 
     for (name, func) in NAMESPACE {
-        env.set(name, MalType::Fn(MalFunc(Rc::new(func))));
+        env.set(name, MalType::Fn(InternalFn(Rc::new(func))));
     }
 
     let eval_env = Rc::clone(&env);
@@ -265,7 +265,7 @@ fn main() {
         }
     };
 
-    env.set("eval", MalType::Fn(MalFunc(Rc::new(eval_func))));
+    env.set("eval", MalType::Fn(InternalFn(Rc::new(eval_func))));
 
     rep("(def! not (fn* (a) (if a false true)))", Rc::clone(&env));
     rep(

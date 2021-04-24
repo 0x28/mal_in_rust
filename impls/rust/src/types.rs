@@ -13,8 +13,8 @@ pub enum MalType {
     List(Vec<MalType>),
     Vector(Vec<MalType>),
     Map(HashMap<String, MalType>),
-    Fn(MalFunc),
-    FnTco(Rc<TailCallFn>),
+    Fn(InternalFn),
+    FnUser(Rc<UserFn>),
     Integer(i64),
     Symbol(String),
     String(String),
@@ -48,22 +48,22 @@ impl Default for MalType {
 }
 
 #[derive(Clone)]
-pub struct TailCallFn {
+pub struct UserFn {
     pub ast: MalType,
     pub params: Vec<String>,
     pub env: EnvRef,
-    pub fun: MalFunc,
+    pub fun: InternalFn,
     is_macro: Cell<bool>,
 }
 
-impl TailCallFn {
+impl UserFn {
     pub fn new(
         ast: MalType,
         params: Vec<String>,
         env: EnvRef,
-        fun: MalFunc,
-    ) -> TailCallFn {
-        TailCallFn {
+        fun: InternalFn,
+    ) -> UserFn {
+        UserFn {
             ast,
             params,
             env,
@@ -81,34 +81,34 @@ impl TailCallFn {
     }
 }
 
-impl std::fmt::Debug for TailCallFn {
+impl std::fmt::Debug for UserFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.fun)
     }
 }
 
-impl std::fmt::Display for TailCallFn {
+impl std::fmt::Display for UserFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.fun)
     }
 }
 
 #[derive(Clone)]
-pub struct MalFunc(pub Rc<dyn Fn(&[MalType]) -> Result<MalType, EvalError>>);
+pub struct InternalFn(pub Rc<dyn Fn(&[MalType]) -> Result<MalType, EvalError>>);
 
-impl std::fmt::Display for MalFunc {
+impl std::fmt::Display for InternalFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "<function@{:p}>", &self.0)
     }
 }
 
-impl std::fmt::Debug for MalFunc {
+impl std::fmt::Debug for InternalFn {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self)
     }
 }
 
-impl PartialEq for MalFunc {
+impl PartialEq for InternalFn {
     fn eq(&self, _other: &Self) -> bool {
         false
     }

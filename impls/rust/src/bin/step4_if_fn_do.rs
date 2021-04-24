@@ -2,7 +2,7 @@ use mal::core::NAMESPACE;
 use mal::env::{Env, EnvRef};
 use mal::reader;
 use mal::types::{EvalError, MalType};
-use mal::{printer::pr_str, types::MalFunc};
+use mal::{printer::pr_str, types::InternalFn};
 
 use std::io::{self, BufRead, Write};
 use std::{collections::HashMap, rc::Rc};
@@ -156,7 +156,7 @@ fn apply_lambda(
         eval(body.clone(), Rc::new(local_env))
     };
 
-    Ok(MalType::Fn(MalFunc(Rc::new(lambda))))
+    Ok(MalType::Fn(InternalFn(Rc::new(lambda))))
 }
 
 fn eval(ast: MalType, env: EnvRef) -> Result<MalType, EvalError> {
@@ -208,7 +208,7 @@ fn main() {
     let env = Rc::new(Env::new(None));
 
     for (name, func) in NAMESPACE {
-        env.set(name, MalType::Fn(MalFunc(Rc::new(func))));
+        env.set(name, MalType::Fn(InternalFn(Rc::new(func))));
     }
 
     rep("(def! not (fn* (a) (if a false true)))", Rc::clone(&env));

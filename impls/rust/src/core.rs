@@ -252,7 +252,7 @@ fn swap(args: &[MalType]) -> Result<MalType, EvalError> {
             atom.reset(result.clone());
             Ok(result)
         }
-        [MalType::Atom(atom), MalType::FnTco(tco_fun), rest @ ..] => {
+        [MalType::Atom(atom), MalType::FnUser(tco_fun), rest @ ..] => {
             let mut new_args = vec![atom.deref()];
             new_args.append(&mut rest.to_vec());
 
