@@ -53,6 +53,32 @@ pub struct TailCallFn {
     pub params: Vec<String>,
     pub env: EnvRef,
     pub fun: MalFunc,
+    is_macro: Cell<bool>,
+}
+
+impl TailCallFn {
+    pub fn new(
+        ast: MalType,
+        params: Vec<String>,
+        env: EnvRef,
+        fun: MalFunc,
+    ) -> TailCallFn {
+        TailCallFn {
+            ast,
+            params,
+            env,
+            fun,
+            is_macro: Cell::new(false),
+        }
+    }
+
+    pub fn mark_as_macro(&self) {
+        self.is_macro.swap(&Cell::new(true));
+    }
+
+    pub fn is_macro(&self) -> bool {
+        self.is_macro.get()
+    }
 }
 
 impl std::fmt::Debug for TailCallFn {
@@ -137,10 +163,10 @@ impl Clone for MalAtom {
 #[derive(Debug)]
 pub enum EvalError {
     UnknownVariable(String),
-    TypeMismatch(String, String),
-    TypeMismatchMultiple(String, Vec<String>),
-    ArityMismatch(String, usize),
-    ArityMismatchRange(String, usize, usize),
+    TypeMismatch(&'static str, &'static str),
+    TypeMismatchMultiple(&'static str, Vec<&'static str>),
+    ArityMismatch(&'static str, usize),
+    ArityMismatchRange(&'static str, usize, usize),
     DivisionByZero,
     ExpectedFunction(String),
     ExpectedSymbol(String),
@@ -149,6 +175,7 @@ pub enum EvalError {
     EmptyDo,
     ReaderError(ReaderError),
     InOutError(io::Error),
+    InvalidIndex(usize, usize),
 }
 
 impl Display for EvalError {
@@ -225,6 +252,13 @@ impl Display for EvalError {
             }
             EvalError::InOutError(err) => {
                 write!(f, "{}", err)
+            }
+            EvalError::InvalidIndex(size, idx) => {
+                write!(
+                    f,
+                    "Index '{}' out of bounds in collection of size '{}'",
+                    idx, size
+                )
             }
         }
     }

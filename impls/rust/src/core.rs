@@ -15,39 +15,35 @@ fn extract_numbers(args: &[MalType]) -> Option<Vec<i64>> {
 }
 
 pub fn plus(args: &[MalType]) -> Result<MalType, EvalError> {
-    let numbers = extract_numbers(args).ok_or_else(|| {
-        EvalError::TypeMismatch("+".to_string(), "number".to_string())
-    })?;
+    let numbers =
+        extract_numbers(args).ok_or(EvalError::TypeMismatch("+", "number"))?;
 
     Ok(MalType::Integer(numbers.iter().sum()))
 }
 
 pub fn mul(args: &[MalType]) -> Result<MalType, EvalError> {
-    let numbers = extract_numbers(args).ok_or_else(|| {
-        EvalError::TypeMismatch("*".to_string(), "number".to_string())
-    })?;
+    let numbers =
+        extract_numbers(args).ok_or(EvalError::TypeMismatch("*", "number"))?;
 
     Ok(MalType::Integer(numbers.iter().product()))
 }
 
 pub fn minus(args: &[MalType]) -> Result<MalType, EvalError> {
-    let numbers = extract_numbers(args).ok_or_else(|| {
-        EvalError::TypeMismatch("-".to_string(), "number".to_string())
-    })?;
+    let numbers =
+        extract_numbers(args).ok_or(EvalError::TypeMismatch("-", "number"))?;
 
     match numbers.as_slice() {
         [first] => Ok(MalType::Integer(-first)),
         [first, ref rest @ ..] => {
             Ok(MalType::Integer(rest.iter().fold(*first, |acc, v| acc - v)))
         }
-        _ => Err(EvalError::ArityMismatch("-".to_string(), 1)),
+        _ => Err(EvalError::ArityMismatch("-", 1)),
     }
 }
 
 pub fn div(args: &[MalType]) -> Result<MalType, EvalError> {
-    let numbers = extract_numbers(args).ok_or_else(|| {
-        EvalError::TypeMismatch("/".to_string(), "number".to_string())
-    })?;
+    let numbers =
+        extract_numbers(args).ok_or(EvalError::TypeMismatch("/", "number"))?;
 
     match numbers.as_slice() {
         [first] => Ok(MalType::Integer(1 / first)),
@@ -59,7 +55,7 @@ pub fn div(args: &[MalType]) -> Result<MalType, EvalError> {
                 None => Err(EvalError::DivisionByZero),
             }
         }
-        _ => Err(EvalError::ArityMismatch("/".to_string(), 1)),
+        _ => Err(EvalError::ArityMismatch("/", 1)),
     }
 }
 
@@ -85,7 +81,7 @@ fn is_list(args: &[MalType]) -> Result<MalType, EvalError> {
     if let [value] = args {
         Ok(MalType::Boolean(matches!(value, MalType::List(_))))
     } else {
-        Err(EvalError::ArityMismatch("list?".to_string(), 1))
+        Err(EvalError::ArityMismatch("list?", 1))
     }
 }
 
@@ -94,13 +90,10 @@ fn is_empty(args: &[MalType]) -> Result<MalType, EvalError> {
         match value {
             MalType::List(list) => Ok(MalType::Boolean(list.is_empty())),
             MalType::Vector(vec) => Ok(MalType::Boolean(vec.is_empty())),
-            _ => Err(EvalError::TypeMismatch(
-                "empty?".to_string(),
-                "list | vector".to_string(),
-            )),
+            _ => Err(EvalError::TypeMismatch("empty?", "list | vector")),
         }
     } else {
-        Err(EvalError::ArityMismatch("empty?".to_string(), 1))
+        Err(EvalError::ArityMismatch("empty?", 1))
     }
 }
 
@@ -110,13 +103,10 @@ fn count(args: &[MalType]) -> Result<MalType, EvalError> {
             MalType::List(list) => Ok(MalType::Integer(list.len() as i64)),
             MalType::Vector(vec) => Ok(MalType::Integer(vec.len() as i64)),
             MalType::Nil => Ok(MalType::Integer(0)),
-            _ => Err(EvalError::TypeMismatch(
-                "count".to_string(),
-                "list | vector".to_string(),
-            )),
+            _ => Err(EvalError::TypeMismatch("count", "list | vector")),
         }
     } else {
-        Err(EvalError::ArityMismatch("count".to_string(), 1))
+        Err(EvalError::ArityMismatch("count", 1))
     }
 }
 
@@ -124,12 +114,12 @@ fn equal(args: &[MalType]) -> Result<MalType, EvalError> {
     if let [left, right] = args {
         Ok(MalType::Boolean(left == right))
     } else {
-        Err(EvalError::ArityMismatch("=".to_string(), 2))
+        Err(EvalError::ArityMismatch("=", 2))
     }
 }
 
 fn cmp(
-    name: String,
+    name: &'static str,
     ordering: &[Ordering],
     args: &[MalType],
 ) -> Result<MalType, EvalError> {
@@ -137,29 +127,25 @@ fn cmp(
         [MalType::Integer(left), MalType::Integer(right)] => {
             Ok(MalType::Boolean(ordering.contains(&left.cmp(right))))
         }
-        [_, _] => Err(EvalError::TypeMismatch(name, "number".to_string())),
+        [_, _] => Err(EvalError::TypeMismatch(name, "number")),
         _ => Err(EvalError::ArityMismatch(name, 2)),
     }
 }
 
 fn less(args: &[MalType]) -> Result<MalType, EvalError> {
-    cmp("<".to_string(), &[Ordering::Less], args)
+    cmp("<", &[Ordering::Less], args)
 }
 
 fn greater(args: &[MalType]) -> Result<MalType, EvalError> {
-    cmp(">".to_string(), &[Ordering::Greater], args)
+    cmp(">", &[Ordering::Greater], args)
 }
 
 fn greater_equal(args: &[MalType]) -> Result<MalType, EvalError> {
-    cmp(
-        ">=".to_string(),
-        &[Ordering::Greater, Ordering::Equal],
-        args,
-    )
+    cmp(">=", &[Ordering::Greater, Ordering::Equal], args)
 }
 
 fn less_equal(args: &[MalType]) -> Result<MalType, EvalError> {
-    cmp("<=".to_string(), &[Ordering::Less, Ordering::Equal], args)
+    cmp("<=", &[Ordering::Less, Ordering::Equal], args)
 }
 
 #[allow(clippy::clippy::unnecessary_wraps)]
@@ -198,23 +184,23 @@ fn println(args: &[MalType]) -> Result<MalType, EvalError> {
 }
 
 fn read_string(args: &[MalType]) -> Result<MalType, EvalError> {
-    let fn_name = String::from("read-string");
+    let fn_name = "read-string";
     match args {
         [MalType::String(string)] => {
             reader::read_str(string).map_err(EvalError::ReaderError)
         }
-        [_] => Err(EvalError::TypeMismatch(fn_name, "string".to_string())),
+        [_] => Err(EvalError::TypeMismatch(fn_name, "string")),
         _ => Err(EvalError::ArityMismatch(fn_name, 1)),
     }
 }
 
 fn slurp(args: &[MalType]) -> Result<MalType, EvalError> {
-    let fn_name = String::from("slurp");
+    let fn_name = "slurp";
     match args {
         [MalType::String(string)] => fs::read_to_string(PathBuf::from(string))
             .map(MalType::String)
             .map_err(EvalError::InOutError),
-        [_] => Err(EvalError::TypeMismatch(fn_name, "string".to_string())),
+        [_] => Err(EvalError::TypeMismatch(fn_name, "string")),
         _ => Err(EvalError::ArityMismatch(fn_name, 1)),
     }
 }
@@ -223,7 +209,7 @@ fn atom(args: &[MalType]) -> Result<MalType, EvalError> {
     if let [arg] = args {
         Ok(MalType::Atom(MalAtom::new(arg.clone())))
     } else {
-        Err(EvalError::ArityMismatch("atom".to_string(), 1))
+        Err(EvalError::ArityMismatch("atom", 1))
     }
 }
 
@@ -231,18 +217,15 @@ fn is_atom(args: &[MalType]) -> Result<MalType, EvalError> {
     match args {
         [MalType::Atom(_)] => Ok(MalType::Boolean(true)),
         [_] => Ok(MalType::Boolean(false)),
-        _ => Err(EvalError::ArityMismatch("atom?".to_string(), 1)),
+        _ => Err(EvalError::ArityMismatch("atom?", 1)),
     }
 }
 
 fn deref(args: &[MalType]) -> Result<MalType, EvalError> {
     match args {
         [MalType::Atom(atom)] => Ok(atom.deref()),
-        [_] => Err(EvalError::TypeMismatch(
-            "deref".to_string(),
-            "atom".to_string(),
-        )),
-        _ => Err(EvalError::ArityMismatch("deref".to_string(), 1)),
+        [_] => Err(EvalError::TypeMismatch("deref", "atom")),
+        _ => Err(EvalError::ArityMismatch("deref", 1)),
     }
 }
 
@@ -252,16 +235,13 @@ fn reset(args: &[MalType]) -> Result<MalType, EvalError> {
             atom.reset(value.clone());
             Ok(value.clone())
         }
-        [_] => Err(EvalError::TypeMismatch(
-            "reset!".to_string(),
-            "atom".to_string(),
-        )),
-        _ => Err(EvalError::ArityMismatch("reset!".to_string(), 2)),
+        [_] => Err(EvalError::TypeMismatch("reset!", "atom")),
+        _ => Err(EvalError::ArityMismatch("reset!", 2)),
     }
 }
 
 fn swap(args: &[MalType]) -> Result<MalType, EvalError> {
-    let swap_name = String::from("swap!");
+    let swap_name = "swap!";
 
     match args {
         [MalType::Atom(atom), MalType::Fn(fun), rest @ ..] => {
@@ -282,14 +262,14 @@ fn swap(args: &[MalType]) -> Result<MalType, EvalError> {
         }
         [_, _, ..] => Err(EvalError::TypeMismatchMultiple(
             swap_name,
-            vec!["atom".to_string(), "function".to_string()],
+            vec!["atom", "function"],
         )),
         _ => Err(EvalError::ArityMismatchRange(swap_name, 2, usize::MAX)),
     }
 }
 
 fn cons(args: &[MalType]) -> Result<MalType, EvalError> {
-    let cons_name = String::from("cons");
+    let cons_name = "cons";
 
     match args {
         [value, MalType::List(list)] | [value, MalType::Vector(list)] => {
@@ -300,7 +280,7 @@ fn cons(args: &[MalType]) -> Result<MalType, EvalError> {
         }
         [_, _] => Err(EvalError::TypeMismatchMultiple(
             cons_name,
-            vec!["any".to_string(), "list".to_string()],
+            vec!["any", "list"],
         )),
         _ => Err(EvalError::ArityMismatch(cons_name, 2)),
     }
@@ -314,12 +294,7 @@ fn concat(args: &[MalType]) -> Result<MalType, EvalError> {
             MalType::List(other) | MalType::Vector(other) => {
                 list.extend_from_slice(other)
             }
-            _ => {
-                return Err(EvalError::TypeMismatch(
-                    "concat".to_string(),
-                    "list".to_string(),
-                ))
-            }
+            _ => return Err(EvalError::TypeMismatch("concat", "list")),
         }
     }
 
@@ -330,14 +305,50 @@ fn vec(args: &[MalType]) -> Result<MalType, EvalError> {
     match args {
         [MalType::List(list)] => Ok(MalType::Vector(list.clone())),
         [MalType::Vector(vec)] => Ok(MalType::Vector(vec.clone())),
-        [_] => Err(EvalError::TypeMismatch(
-            "vec".to_string(),
-            "list | vector".to_string(),
-        )),
-        _ => Err(EvalError::ArityMismatch("vec".to_string(), 1)),
+        [_] => Err(EvalError::TypeMismatch("vec", "list | vector")),
+        _ => Err(EvalError::ArityMismatch("vec", 1)),
     }
 }
 
+fn nth(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::List(elements), MalType::Integer(idx)]
+        | [MalType::Vector(elements), MalType::Integer(idx)] => {
+            let idx = *idx as usize;
+            Ok(elements
+                .get(idx)
+                .ok_or_else(|| EvalError::InvalidIndex(elements.len(), idx))?
+                .clone())
+        }
+        [_, _] => Err(EvalError::TypeMismatchMultiple(
+            "nth",
+            vec!["list | vector", "integer"],
+        )),
+        _ => Err(EvalError::ArityMismatch("nth", 2)),
+    }
+}
+
+fn first(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::Nil] => Ok(MalType::Nil),
+        [MalType::List(elements)] | [MalType::Vector(elements)] => {
+            Ok(elements.iter().next().unwrap_or(&MalType::Nil).clone())
+        }
+        [_] => Err(EvalError::TypeMismatch("first", "list | vector")),
+        _ => Err(EvalError::ArityMismatch("first", 1)),
+    }
+}
+
+fn rest(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::Nil] => Ok(MalType::List(vec![])),
+        [MalType::List(elements)] | [MalType::Vector(elements)] => {
+            Ok(MalType::List(elements.iter().skip(1).cloned().collect()))
+        }
+        [_] => Err(EvalError::TypeMismatch("rest", "list | vector")),
+        _ => Err(EvalError::ArityMismatch("rest", 1)),
+    }
+}
 type Namespace =
     &'static [(&'static str, fn(&[MalType]) -> Result<MalType, EvalError>)];
 
@@ -369,4 +380,7 @@ pub const NAMESPACE: Namespace = &[
     ("cons", cons),
     ("concat", concat),
     ("vec", vec),
+    ("nth", nth),
+    ("first", first),
+    ("rest", rest),
 ];

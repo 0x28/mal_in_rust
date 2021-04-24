@@ -59,7 +59,7 @@ fn apply_def(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
             Ok(value)
         }
         &[actual, _] => Err(EvalError::ExpectedSymbol(format!("{}", actual))),
-        _ => Err(EvalError::ArityMismatch("def!".to_string(), 2)),
+        _ => Err(EvalError::ArityMismatch("def!", 2)),
     }
 }
 
@@ -83,7 +83,7 @@ fn apply_let(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
             }
             eval(body.clone(), local_env)
         }
-        _ => Err(EvalError::ArityMismatch("let*".to_string(), 2)),
+        _ => Err(EvalError::ArityMismatch("let*", 2)),
     }
 }
 

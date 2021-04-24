@@ -59,7 +59,7 @@ fn apply_def(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
             Ok(value)
         }
         &[actual, _] => Err(EvalError::ExpectedSymbol(format!("{}", actual))),
-        _ => Err(EvalError::ArityMismatch("def!".to_string(), 2)),
+        _ => Err(EvalError::ArityMismatch("def!", 2)),
     }
 }
 
@@ -83,7 +83,7 @@ fn apply_let(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
             }
             eval(body.clone(), local_env)
         }
-        _ => Err(EvalError::ArityMismatch("let*".to_string(), 2)),
+        _ => Err(EvalError::ArityMismatch("let*", 2)),
     }
 }
 
@@ -112,10 +112,10 @@ fn apply_if(exprs: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
             (true, _) => eval(then_branch.clone(), env),
             (false, [else_branch]) => eval(else_branch.clone(), env),
             (false, []) => Ok(MalType::Nil),
-            _ => Err(EvalError::ArityMismatchRange("if".to_string(), 2, 3)),
+            _ => Err(EvalError::ArityMismatchRange("if", 2, 3)),
         }
     } else {
-        Err(EvalError::ArityMismatchRange("if".to_string(), 2, 3))
+        Err(EvalError::ArityMismatchRange("if", 2, 3))
     }
 }
 
@@ -124,7 +124,7 @@ fn apply_lambda(
     env: EnvRef,
 ) -> Result<MalType, EvalError> {
     if exprs.len() != 3 {
-        return Err(EvalError::ArityMismatch("fn*".to_string(), 2));
+        return Err(EvalError::ArityMismatch("fn*", 2));
     }
 
     let body = exprs.remove(2);

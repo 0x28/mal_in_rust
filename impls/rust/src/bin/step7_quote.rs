@@ -55,7 +55,7 @@ fn apply_def(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
             Ok(value)
         }
         &[actual, _] => Err(EvalError::ExpectedSymbol(format!("{}", actual))),
-        _ => Err(EvalError::ArityMismatch("def!".to_string(), 2)),
+        _ => Err(EvalError::ArityMismatch("def!", 2)),
     }
 }
 
@@ -82,7 +82,7 @@ fn apply_let(
             }
             Ok((body.clone(), local_env))
         }
-        _ => Err(EvalError::ArityMismatch("let*".to_string(), 2)),
+        _ => Err(EvalError::ArityMismatch("let*", 2)),
     }
 }
 
@@ -114,10 +114,10 @@ fn apply_if(exprs: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
             (true, _) => Ok(then_branch.clone()),
             (false, [else_branch]) => Ok(else_branch.clone()),
             (false, []) => Ok(MalType::Nil),
-            _ => Err(EvalError::ArityMismatchRange("if".to_string(), 2, 3)),
+            _ => Err(EvalError::ArityMismatchRange("if", 2, 3)),
         }
     } else {
-        Err(EvalError::ArityMismatchRange("if".to_string(), 2, 3))
+        Err(EvalError::ArityMismatchRange("if", 2, 3))
     }
 }
 
@@ -126,7 +126,7 @@ fn apply_lambda(
     env: EnvRef,
 ) -> Result<MalType, EvalError> {
     if exprs.len() != 3 {
-        return Err(EvalError::ArityMismatch("fn*".to_string(), 2));
+        return Err(EvalError::ArityMismatch("fn*", 2));
     }
 
     let body = exprs.remove(2);
@@ -162,19 +162,19 @@ fn apply_lambda(
     };
 
     let fun = MalFunc(Rc::new(lambda));
-    Ok(MalType::FnTco(Rc::new(TailCallFn {
-        ast: tco_body,
-        params: tco_parameters,
-        env: tco_env,
+    Ok(MalType::FnTco(Rc::new(TailCallFn::new(
+        tco_body,
+        tco_parameters,
+        tco_env,
         fun,
-    })))
+    ))))
 }
 
 fn apply_quote(mut args: Vec<MalType>) -> Result<MalType, EvalError> {
     if args.len() == 2 {
         Ok(args.remove(1))
     } else {
-        Err(EvalError::ArityMismatch("quote".to_string(), 1))
+        Err(EvalError::ArityMismatch("quote", 1))
     }
 }
 
@@ -194,10 +194,7 @@ fn replace_splice_unquote(list: Vec<MalType>) -> Result<MalType, EvalError> {
                         MalType::List(processed_list),
                     ];
                 } else {
-                    return Err(EvalError::ArityMismatch(
-                        "splice-unquote".to_string(),
-                        1,
-                    ));
+                    return Err(EvalError::ArityMismatch("splice-unquote", 1));
                 }
             }
             _ => {
@@ -221,7 +218,7 @@ fn apply_quasiquote(ast: MalType) -> Result<MalType, EvalError> {
             if list.len() == 2 {
                 Ok(list[1].clone())
             } else {
-                Err(EvalError::ArityMismatch("unquote".to_string(), 1))
+                Err(EvalError::ArityMismatch("unquote", 1))
             }
         }
         MalType::List(list) => replace_splice_unquote(list),
@@ -269,20 +266,14 @@ fn eval(mut ast: MalType, mut env: EnvRef) -> Result<MalType, EvalError> {
                     return if list.len() == 2 {
                         apply_quasiquote(list[1].clone())
                     } else {
-                        Err(EvalError::ArityMismatch(
-                            "quasiquoteexpand".to_string(),
-                            1,
-                        ))
+                        Err(EvalError::ArityMismatch("quasiquoteexpand", 1))
                     }
                 }
                 MalType::Symbol(sym) if sym == "quasiquote" => {
                     if list.len() == 2 {
                         ast = apply_quasiquote(list[1].clone())?;
                     } else {
-                        return Err(EvalError::ArityMismatch(
-                            "quasiquote".to_string(),
-                            1,
-                        ));
+                        return Err(EvalError::ArityMismatch("quasiquote", 1));
                     }
                 }
                 _ => {
@@ -354,7 +345,7 @@ fn main() {
         if let [arg] = args {
             eval(arg.clone(), Rc::clone(&eval_env))
         } else {
-            Err(EvalError::ArityMismatch("eval".to_string(), 1))
+            Err(EvalError::ArityMismatch("eval", 1))
         }
     };
 

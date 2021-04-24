@@ -29,7 +29,7 @@ impl Env {
             [fixed_params @ .., ampersand, var_param] if ampersand == "&" => {
                 if exprs.len() < fixed_params.len() {
                     return Err(EvalError::ArityMismatchRange(
-                        "lambda".to_string(),
+                        "lambda",
                         fixed_params.len(),
                         usize::MAX,
                     ));
@@ -59,7 +59,7 @@ impl Env {
             _ => {
                 if binds.len() != exprs.len() {
                     return Err(EvalError::ArityMismatch(
-                        "lambda".to_string(),
+                        "lambda",
                         binds.len(),
                     ));
                 }
