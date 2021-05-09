@@ -22,6 +22,14 @@ pub enum MalType {
     Atom(MalAtom),
 }
 
+impl MalType {
+    pub const KEYWORD_SYMBOL: char = '\u{29E}';
+
+    pub fn is_keyword(value: &str) -> bool {
+        value.starts_with(MalType::KEYWORD_SYMBOL)
+    }
+}
+
 impl PartialEq for MalType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -167,22 +175,26 @@ pub enum EvalError {
     TypeMismatchMultiple(&'static str, Vec<&'static str>),
     ArityMismatch(&'static str, usize),
     ArityMismatchRange(&'static str, usize, usize),
+    ArityMismatchEven(&'static str),
+    ArityMismatchOdd(&'static str),
     DivisionByZero,
     ExpectedFunction(String),
     ExpectedSymbol(String),
     InvalidLetBinding,
     InvalidFnBinding,
+    InvalidCatchBinding,
     EmptyDo,
     ReaderError(ReaderError),
     InOutError(io::Error),
     InvalidIndex(usize, usize),
+    MalException(MalType),
 }
 
 impl Display for EvalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             EvalError::UnknownVariable(var) => {
-                write!(f, "Variable '{}' not found", var)
+                write!(f, "'{}' not found", var)
             }
             EvalError::TypeMismatch(func, t) => {
                 write!(f, "Function '{}' expects type '{}'", func, t)
@@ -217,6 +229,20 @@ impl Display for EvalError {
                     )
                 }
             }
+            EvalError::ArityMismatchEven(func) => {
+                write!(
+                    f,
+                    "Function '{}' expects an even number of argument(s)",
+                    func
+                )
+            }
+            EvalError::ArityMismatchOdd(func) => {
+                write!(
+                    f,
+                    "Function '{}' expects an odd number of argument(s)",
+                    func
+                )
+            }
             EvalError::DivisionByZero => {
                 write!(f, "Division by zero")
             }
@@ -244,6 +270,13 @@ impl Display for EvalError {
                      (fn* (<symbol> ...[& <symbol>]) <expr>)"
                 )
             }
+            EvalError::InvalidCatchBinding => {
+                write!(
+                    f,
+                    "catch* binding not of the form \
+                     (catch* <symbol> <expr>)"
+                )
+            }
             EvalError::EmptyDo => {
                 write!(f, "do should at least contain one expression")
             }
@@ -259,6 +292,9 @@ impl Display for EvalError {
                     "Index '{}' out of bounds in collection of size '{}'",
                     idx, size
                 )
+            }
+            EvalError::MalException(exc) => {
+                write!(f, "Uncaught exception '{}'", exc)
             }
         }
     }

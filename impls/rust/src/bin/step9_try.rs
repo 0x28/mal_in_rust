@@ -4,9 +4,9 @@ use mal::types::{EvalError, MalType};
 use mal::{core::NAMESPACE, types::UserFn};
 use mal::{printer::pr_str, types::InternalFn};
 
-use std::{collections::HashMap, rc::Rc};
-use std::io::{self, BufRead, Write};
 use std::env;
+use std::io::{self, BufRead, Write};
+use std::{collections::HashMap, rc::Rc};
 
 fn read(input: &str) -> Option<MalType> {
     match reader::read_str(input) {
@@ -168,13 +168,165 @@ fn apply_lambda(
     ))))
 }
 
+fn apply_quote(mut args: Vec<MalType>) -> Result<MalType, EvalError> {
+    if args.len() == 2 {
+        Ok(args.remove(1))
+    } else {
+        Err(EvalError::ArityMismatch("quote", 1))
+    }
+}
+
+fn replace_splice_unquote(list: Vec<MalType>) -> Result<MalType, EvalError> {
+    let splice_unquote = vec![MalType::Symbol("splice-unquote".to_string())];
+    let concat = MalType::Symbol("concat".to_string());
+    let cons = MalType::Symbol("cons".to_string());
+    let mut processed_list = vec![];
+
+    for elt in list.into_iter().rev() {
+        match elt {
+            MalType::List(list) if list.starts_with(&splice_unquote) => {
+                if list.len() == 2 {
+                    processed_list = vec![
+                        concat.clone(),
+                        list[1].clone(),
+                        MalType::List(processed_list),
+                    ];
+                } else {
+                    return Err(EvalError::ArityMismatch("splice-unquote", 1));
+                }
+            }
+            _ => {
+                processed_list = vec![
+                    cons.clone(),
+                    apply_quasiquote(elt)?,
+                    MalType::List(processed_list),
+                ]
+            }
+        }
+    }
+
+    Ok(MalType::List(processed_list))
+}
+
+fn apply_quasiquote(ast: MalType) -> Result<MalType, EvalError> {
+    let unquote = MalType::Symbol("unquote".to_string());
+
+    match ast {
+        MalType::List(list) if list.starts_with(&[unquote]) => {
+            if list.len() == 2 {
+                Ok(list[1].clone())
+            } else {
+                Err(EvalError::ArityMismatch("unquote", 1))
+            }
+        }
+        MalType::List(list) => replace_splice_unquote(list),
+        MalType::Vector(vec) => match replace_splice_unquote(vec)? {
+            MalType::List(spliced) => Ok(MalType::List(vec![
+                MalType::Symbol("vec".to_string()),
+                MalType::List(spliced),
+            ])),
+            _ => unreachable!(),
+        },
+        MalType::Map(_) | MalType::Symbol(_) => Ok(MalType::List(vec![
+            MalType::Symbol("quote".to_string()),
+            ast,
+        ])),
+        _ => Ok(ast),
+    }
+}
+
+fn apply_defmacro(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
+    match &args {
+        [MalType::Symbol(name), expr] => {
+            let value = match eval(expr.clone(), Rc::clone(&env))? {
+                MalType::FnUser(func) => {
+                    func.mark_as_macro();
+                    MalType::FnUser(func)
+                }
+                value => value,
+            };
+            env.set(name, value.clone());
+            Ok(value)
+        }
+        &[actual, _] => Err(EvalError::ExpectedSymbol(format!("{}", actual))),
+        _ => Err(EvalError::ArityMismatch("def!", 2)),
+    }
+}
+
+fn is_macro_call(
+    ast: &MalType,
+    env: EnvRef,
+) -> Option<(Rc<UserFn>, &[MalType])> {
+    let list = match ast {
+        MalType::List(list) => list,
+        _ => return None,
+    };
+
+    let (sym, args) = match list.as_slice() {
+        [MalType::Symbol(sym), args @ ..] => (sym, args),
+        _ => return None,
+    };
+
+    match env.get(sym) {
+        Ok(MalType::FnUser(fun)) if fun.is_macro() => Some((fun, args)),
+        _ => None,
+    }
+}
+
+fn macroexpand(mut ast: MalType, env: EnvRef) -> Result<MalType, EvalError> {
+    while let Some((fun, args)) = is_macro_call(&ast, Rc::clone(&env)) {
+        ast = fun.fun.0(args)?;
+    }
+
+    Ok(ast)
+}
+
+fn apply_trycatch(
+    args: &[MalType],
+    env: Rc<Env>,
+) -> Result<MalType, EvalError> {
+    if args.is_empty() {
+        return Err(EvalError::ArityMismatchRange("try*", 1, 2));
+    }
+
+    let try_expr = args[0].clone();
+    let exc = match eval(try_expr, Rc::clone(&env)) {
+        Ok(good) => return Ok(good),
+        Err(EvalError::MalException(value)) => value,
+        Err(err) => MalType::String(format!("{}", err)),
+    };
+
+    if let Some(MalType::List(catch)) = args.get(1) {
+        match catch.as_slice() {
+            [MalType::Symbol(sym), MalType::Symbol(binding), catch_body]
+                if sym == "catch*" =>
+            {
+                let catch_env = Env::from_bindings(
+                    Some(env),
+                    vec![binding.clone()],
+                    vec![exc],
+                )?;
+
+                eval(catch_body.clone(), Rc::new(catch_env))
+            }
+            _ => Err(EvalError::InvalidCatchBinding),
+        }
+    } else {
+        Err(EvalError::MalException(exc))
+    }
+}
+
 fn eval(mut ast: MalType, mut env: EnvRef) -> Result<MalType, EvalError> {
     loop {
+        ast = macroexpand(ast, Rc::clone(&env))?;
         match ast {
             MalType::List(ref list) if list.is_empty() => return Ok(ast),
             MalType::List(list) => match &list[0] {
                 MalType::Symbol(sym) if sym == "def!" => {
                     return apply_def(&list[1..], env);
+                }
+                MalType::Symbol(sym) if sym == "defmacro!" => {
+                    return apply_defmacro(&list[1..], env);
                 }
                 MalType::Symbol(sym) if sym == "let*" => {
                     let (let_ast, let_env) = apply_let(&list[1..], env)?;
@@ -189,6 +341,33 @@ fn eval(mut ast: MalType, mut env: EnvRef) -> Result<MalType, EvalError> {
                 }
                 MalType::Symbol(sym) if sym == "fn*" => {
                     return apply_lambda(list, env);
+                }
+                MalType::Symbol(sym) if sym == "quote" => {
+                    return apply_quote(list);
+                }
+                MalType::Symbol(sym) if sym == "quasiquoteexpand" => {
+                    return if list.len() == 2 {
+                        apply_quasiquote(list[1].clone())
+                    } else {
+                        Err(EvalError::ArityMismatch("quasiquoteexpand", 1))
+                    }
+                }
+                MalType::Symbol(sym) if sym == "quasiquote" => {
+                    if list.len() == 2 {
+                        ast = apply_quasiquote(list[1].clone())?;
+                    } else {
+                        return Err(EvalError::ArityMismatch("quasiquote", 1));
+                    }
+                }
+                MalType::Symbol(sym) if sym == "macroexpand" => {
+                    if list.len() == 2 {
+                        return macroexpand(list[1].clone(), Rc::clone(&env));
+                    } else {
+                        return Err(EvalError::ArityMismatch("macroexpand", 1));
+                    }
+                }
+                MalType::Symbol(sym) if sym == "try*" => {
+                    return apply_trycatch(&list[1..], Rc::clone(&env))
                 }
                 _ => {
                     let call = match eval_ast(MalType::List(list), env)? {
@@ -271,6 +450,20 @@ fn main() {
 (def! load-file
   (fn* (f)
     (eval (read-string (str "(do " (slurp f) "\nnil)")))))
+"#,
+        Rc::clone(&env),
+    );
+
+    rep(
+        r#"
+(defmacro! cond
+  (fn* (& xs)
+       (if (> (count xs) 0)
+           (list 'if (first xs)
+                 (if (> (count xs) 1)
+                     (nth xs 1)
+                   (throw "odd number of forms to cond"))
+                 (cons 'cond (rest (rest xs)))))))
 "#,
         Rc::clone(&env),
     );

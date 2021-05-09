@@ -105,7 +105,11 @@ fn read_atom(reader: &mut Reader) -> Result<MalType, ReaderError> {
                 ReaderError::InvalidInteger(token.to_string())
             })?)),
             '"' => Ok(MalType::String(token[1..token.len() - 1].to_string())),
-            ':' => Ok(MalType::String(format!("\u{029E}{}", &token[1..]))),
+            ':' => Ok(MalType::String(format!(
+                "{}{}",
+                MalType::KEYWORD_SYMBOL,
+                &token[1..]
+            ))),
             '-' | '+'
                 if token.len() > 1
                     && token.chars().skip(1).all(|c| c.is_digit(10)) =>
@@ -347,7 +351,7 @@ fn test_read_str() {
         ]))
     );
     let mut map = HashMap::new();
-    map.insert("a".to_owned(), MalType::Integer(100));
+    map.insert("a".to_string(), MalType::Integer(100));
     assert_eq!(read_str("{\"a\" 100}"), Ok(MalType::Map(map)));
     assert_eq!(read_str("-100"), Ok(MalType::Integer(-100)));
     assert_eq!(read_str("+100"), Ok(MalType::Integer(100)));

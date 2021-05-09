@@ -5,10 +5,8 @@ use mal::{core::NAMESPACE, types::UserFn};
 use mal::{printer::pr_str, types::InternalFn};
 
 use std::{collections::HashMap, rc::Rc};
-use std::{
-    env,
-    io::{self, BufRead, Write},
-};
+use std::io::{self, BufRead, Write};
+use std::env;
 
 fn read(input: &str) -> Option<MalType> {
     match reader::read_str(input) {

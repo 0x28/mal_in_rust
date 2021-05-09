@@ -53,7 +53,7 @@ fn pr_str_internal(
         MalType::Symbol(symbol) => {
             write!(writer, "{}", symbol)?;
         }
-        MalType::String(keyword) if keyword.starts_with('\u{29E}') => {
+        MalType::String(keyword) if MalType::is_keyword(keyword) => {
             write!(writer, ":{}", keyword.chars().skip(1).collect::<String>())?;
         }
         MalType::String(string) if print_readably => {

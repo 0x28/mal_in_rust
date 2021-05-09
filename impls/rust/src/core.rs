@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, fs, path::PathBuf};
+use std::{cmp::Ordering, collections::HashMap, fs, path::PathBuf};
 
 use crate::reader;
 use crate::{printer, types::MalAtom};
@@ -77,13 +77,18 @@ fn list(args: &[MalType]) -> Result<MalType, EvalError> {
     Ok(MalType::List(args.to_vec()))
 }
 
-fn is_list(args: &[MalType]) -> Result<MalType, EvalError> {
-    if let [value] = args {
-        Ok(MalType::Boolean(matches!(value, MalType::List(_))))
-    } else {
-        Err(EvalError::ArityMismatch("list?", 1))
+macro_rules! mal_predicate{
+    ($($pattern: pat)|+ $(if $guard: expr)?, $fn: ident, $name: expr) => {
+    fn $fn(args: &[MalType]) -> Result<MalType, EvalError> {
+        match args {
+            [value] => Ok(MalType::Boolean(
+                matches!(value, $($pattern)|+ $(if $guard)?))),
+            _ => Err(EvalError::ArityMismatch($name, 1)),
+        }
     }
-}
+}}
+
+mal_predicate!(MalType::List(_), is_list, "list?");
 
 fn is_empty(args: &[MalType]) -> Result<MalType, EvalError> {
     if let [value] = args {
@@ -213,13 +218,7 @@ fn atom(args: &[MalType]) -> Result<MalType, EvalError> {
     }
 }
 
-fn is_atom(args: &[MalType]) -> Result<MalType, EvalError> {
-    match args {
-        [MalType::Atom(_)] => Ok(MalType::Boolean(true)),
-        [_] => Ok(MalType::Boolean(false)),
-        _ => Err(EvalError::ArityMismatch("atom?", 1)),
-    }
-}
+mal_predicate!(MalType::Atom(_), is_atom, "atom?");
 
 fn deref(args: &[MalType]) -> Result<MalType, EvalError> {
     match args {
@@ -349,6 +348,236 @@ fn rest(args: &[MalType]) -> Result<MalType, EvalError> {
         _ => Err(EvalError::ArityMismatch("rest", 1)),
     }
 }
+
+fn throw(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [arg] => Err(EvalError::MalException(arg.clone())),
+        _ => Err(EvalError::ArityMismatch("throw", 1)),
+    }
+}
+
+fn apply(args: &[MalType]) -> Result<MalType, EvalError> {
+    if args.len() < 2 {
+        return Err(EvalError::ArityMismatchRange("apply", 2, usize::MAX));
+    }
+
+    let types = vec!["function", "any...", "list | vector"];
+
+    let mut new_args = vec![];
+    new_args.extend_from_slice(&args[1..args.len() - 1]);
+
+    match args.last() {
+        Some(MalType::Vector(a)) | Some(MalType::List(a)) => {
+            new_args.extend(a.clone());
+        }
+        _ => return Err(EvalError::TypeMismatchMultiple("apply", types)),
+    }
+
+    match &args[0] {
+        MalType::Fn(f) => f.0(&new_args),
+        MalType::FnUser(f) => f.fun.0(&new_args),
+        _ => Err(EvalError::TypeMismatchMultiple("apply", types)),
+    }
+}
+
+fn map(args: &[MalType]) -> Result<MalType, EvalError> {
+    let mapped_list: Result<Vec<_>, EvalError> = match args {
+        [MalType::Fn(f), MalType::Vector(xs)]
+        | [MalType::Fn(f), MalType::List(xs)] => {
+            xs.chunks(1).map(|value| f.0(value)).collect()
+        }
+        [MalType::FnUser(f), MalType::Vector(xs)]
+        | [MalType::FnUser(f), MalType::List(xs)] => {
+            xs.chunks(1).map(|value| f.fun.0(value)).collect()
+        }
+        [_, _] => {
+            return Err(EvalError::TypeMismatchMultiple(
+                "map",
+                vec!["function", "list | vector"],
+            ))
+        }
+        _ => return Err(EvalError::ArityMismatch("map", 2)),
+    };
+
+    Ok(MalType::List(mapped_list?))
+}
+
+fn symbol(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::String(s)] => Ok(MalType::Symbol(s.to_string())),
+        [_] => Err(EvalError::TypeMismatch("symbol", "string")),
+        _ => Err(EvalError::ArityMismatch("symbol", 1)),
+    }
+}
+
+fn keyword(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::String(s)] => {
+            if s.starts_with(MalType::KEYWORD_SYMBOL) {
+                Ok(MalType::String(s.clone()))
+            } else {
+                Ok(MalType::String(format!("{}{}", MalType::KEYWORD_SYMBOL, s)))
+            }
+        }
+        [_] => Err(EvalError::TypeMismatch("symbol", "string")),
+        _ => Err(EvalError::ArityMismatch("symbol", 1)),
+    }
+}
+
+fn vector(args: &[MalType]) -> Result<MalType, EvalError> {
+    Ok(MalType::Vector(args.to_vec()))
+}
+
+fn hash_map(args: &[MalType]) -> Result<MalType, EvalError> {
+    let mut map = HashMap::new();
+
+    if args.len() % 2 != 0 {
+        return Err(EvalError::ArityMismatchEven("hash-map"));
+    }
+
+    for key_value in args.chunks_exact(2) {
+        match key_value {
+            [MalType::String(key), value] => {
+                map.insert(key.clone(), value.clone());
+            }
+            [_, _] => {
+                return Err(EvalError::TypeMismatch(
+                    "hash-map",
+                    "[string, any]...",
+                ))
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    Ok(MalType::Map(map))
+}
+
+fn assoc(args: &[MalType]) -> Result<MalType, EvalError> {
+    if args.len() % 2 == 0 {
+        return Err(EvalError::ArityMismatchOdd("assoc"));
+    }
+
+    let types = vec!["map", "[string, any]..."];
+
+    match args {
+        [MalType::Map(map), rest @ ..] => {
+            let mut new_map = map.clone();
+            for key_value in rest.chunks_exact(2) {
+                match key_value {
+                    [MalType::String(key), value] => {
+                        new_map.insert(key.clone(), value.clone());
+                    }
+                    [_, _] => {
+                        return Err(EvalError::TypeMismatchMultiple(
+                            "assoc", types,
+                        ))
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            Ok(MalType::Map(new_map))
+        }
+        [_, ..] => Err(EvalError::TypeMismatchMultiple("assoc", types)),
+        _ => Err(EvalError::ArityMismatchRange("assoc", 1, usize::MAX)),
+    }
+}
+
+fn dissoc(args: &[MalType]) -> Result<MalType, EvalError> {
+    let types = vec!["map", "string..."];
+
+    match args {
+        [MalType::Map(hashmap), keys @ ..] => {
+            let mut new_map = hashmap.clone();
+
+            for key in keys {
+                match key {
+                    MalType::String(key) => {
+                        new_map.remove(key);
+                    }
+                    _ => {
+                        return Err(EvalError::TypeMismatchMultiple(
+                            "assoc", types,
+                        ))
+                    }
+                }
+            }
+
+            Ok(MalType::Map(new_map))
+        }
+        [_, ..] => Err(EvalError::TypeMismatchMultiple("assoc", types)),
+        _ => Err(EvalError::ArityMismatchRange("assoc", 1, usize::MAX)),
+    }
+}
+
+fn get(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::Map(map), MalType::String(key)] => {
+            if let Some(value) = map.get(key) {
+                Ok(value.clone())
+            } else {
+                Ok(MalType::Nil)
+            }
+        }
+        [MalType::Nil, _] => Ok(MalType::Nil),
+        [_, _] => Err(EvalError::TypeMismatchMultiple(
+            "get",
+            vec!["map", "string"],
+        )),
+        _ => Err(EvalError::ArityMismatch("get", 2)),
+    }
+}
+
+fn contains(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::Map(map), MalType::String(key)] => {
+            Ok(MalType::Boolean(map.contains_key(key)))
+        }
+        [_, _] => Err(EvalError::TypeMismatchMultiple(
+            "contains",
+            vec!["map", "string"],
+        )),
+        _ => Err(EvalError::ArityMismatch("contains", 2)),
+    }
+}
+
+fn keys(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::Map(map)] => Ok(MalType::List(
+            map.keys().map(|s| MalType::String(s.to_string())).collect(),
+        )),
+        [_] => Err(EvalError::TypeMismatch("keys", "map")),
+        _ => Err(EvalError::ArityMismatch("keys", 1)),
+    }
+}
+
+fn vals(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::Map(map)] => {
+            Ok(MalType::List(map.values().cloned().collect()))
+        }
+        [_] => Err(EvalError::TypeMismatch("vals", "map")),
+        _ => Err(EvalError::ArityMismatch("vals", 1)),
+    }
+}
+
+mal_predicate!(MalType::Nil, is_nil, "nil?");
+mal_predicate!(MalType::Boolean(true), is_true, "true?");
+mal_predicate!(MalType::Boolean(false), is_false, "false?");
+mal_predicate!(MalType::Symbol(_), is_symbol, "symbol?");
+mal_predicate!(MalType::Vector(_), is_vector, "vector?");
+mal_predicate!(
+    MalType::Vector(_) | MalType::List(_),
+    is_sequential,
+    "sequential?"
+);
+mal_predicate!(MalType::Map(_), is_map, "map?");
+mal_predicate!(
+    MalType::String(s) if MalType::is_keyword(s),
+    is_keyword,
+    "keyword?"
+);
+
 type Namespace =
     &'static [(&'static str, fn(&[MalType]) -> Result<MalType, EvalError>)];
 
@@ -383,4 +612,25 @@ pub const NAMESPACE: Namespace = &[
     ("nth", nth),
     ("first", first),
     ("rest", rest),
+    ("throw", throw),
+    ("apply", apply),
+    ("map", map),
+    ("nil?", is_nil),
+    ("true?", is_true),
+    ("false?", is_false),
+    ("symbol?", is_symbol),
+    ("vector?", is_vector),
+    ("map?", is_map),
+    ("sequential?", is_sequential),
+    ("keyword?", is_keyword),
+    ("symbol", symbol),
+    ("keyword", keyword),
+    ("vector", vector),
+    ("hash-map", hash_map),
+    ("assoc", assoc),
+    ("dissoc", dissoc),
+    ("get", get),
+    ("contains?", contains),
+    ("keys", keys),
+    ("vals", vals),
 ];
