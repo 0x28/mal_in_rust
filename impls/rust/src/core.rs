@@ -1,4 +1,7 @@
-use std::{cmp::Ordering, collections::HashMap, fs, path::PathBuf};
+use std::collections::HashMap;
+use std::fs;
+use std::io;
+use std::{cmp::Ordering, io::Write, path::PathBuf};
 
 use crate::reader;
 use crate::{printer, types::MalAtom};
@@ -561,6 +564,31 @@ fn vals(args: &[MalType]) -> Result<MalType, EvalError> {
     }
 }
 
+fn readline(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::String(prompt)] => {
+            print!("{}", prompt);
+            io::stdout().flush().expect("stdout flush failed!");
+            let mut line = String::new();
+            match io::stdin().read_line(&mut line) {
+                Ok(0) => Ok(MalType::Nil),
+                Ok(_) => {
+                    Ok(MalType::String(line.trim_end_matches('\n').to_string()))
+                }
+                Err(msg) => panic!("read_line failed: {}", msg),
+            }
+        }
+        [_] => Err(EvalError::TypeMismatch("readline", "string")),
+        _ => Err(EvalError::ArityMismatch("readline", 1)),
+    }
+}
+
+fn not_implemented(_args: &[MalType]) -> Result<MalType, EvalError> {
+    Err(EvalError::MalException(MalType::String(
+        "not implemented!".to_string(),
+    )))
+}
+
 mal_predicate!(MalType::Nil, is_nil, "nil?");
 mal_predicate!(MalType::Boolean(true), is_true, "true?");
 mal_predicate!(MalType::Boolean(false), is_false, "false?");
@@ -633,4 +661,13 @@ pub const NAMESPACE: Namespace = &[
     ("contains?", contains),
     ("keys", keys),
     ("vals", vals),
+    ("readline", readline),
+    ("time-ms", not_implemented),
+    ("meta", not_implemented),
+    ("with-meta", not_implemented),
+    ("fn?", not_implemented),
+    ("string?", not_implemented),
+    ("number?", not_implemented),
+    ("seq", not_implemented),
+    ("conj", not_implemented),
 ];
