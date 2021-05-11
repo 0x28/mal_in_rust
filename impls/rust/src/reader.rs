@@ -79,7 +79,7 @@ fn wrap_form(
     let form = read_form(reader)?;
 
     let sexpr =
-        MalType::List(vec![MalType::Symbol(operation.to_string()), form]);
+        MalType::new_list(vec![MalType::Symbol(operation.to_string()), form]);
 
     Ok(sexpr)
 }
@@ -89,7 +89,7 @@ fn wrap_with_meta(reader: &mut Reader) -> Result<MalType, ReaderError> {
     let second_arg = read_form(reader)?;
     let first_arg = read_form(reader)?;
 
-    let with_meta = MalType::List(vec![
+    let with_meta = MalType::new_list(vec![
         MalType::Symbol("with-meta".to_string()),
         first_arg,
         second_arg,
@@ -131,11 +131,11 @@ fn read_atom(reader: &mut Reader) -> Result<MalType, ReaderError> {
 }
 
 fn read_list(reader: &mut Reader) -> Result<MalType, ReaderError> {
-    Ok(MalType::List(read_sequence(reader, ("(", ")"))?))
+    Ok(MalType::new_list(read_sequence(reader, ("(", ")"))?))
 }
 
 fn read_vector(reader: &mut Reader) -> Result<MalType, ReaderError> {
-    Ok(MalType::Vector(read_sequence(reader, ("[", "]"))?))
+    Ok(MalType::new_vec(read_sequence(reader, ("[", "]"))?))
 }
 
 fn read_sequence(
@@ -174,7 +174,7 @@ fn read_map(reader: &mut Reader) -> Result<MalType, ReaderError> {
     }
     expect(reader, "}")?;
 
-    Ok(MalType::Map(map))
+    Ok(MalType::new_map(map))
 }
 
 fn expect(
@@ -331,20 +331,20 @@ fn test_tokenize() {
 
 #[test]
 fn test_read_str() {
-    assert_eq!(read_str("()"), Ok(MalType::List(vec![])));
+    assert_eq!(read_str("()"), Ok(MalType::new_list(vec![])));
     assert_eq!(
         read_str("(())"),
-        Ok(MalType::List(vec![MalType::List(vec![])]))
+        Ok(MalType::new_list(vec![MalType::new_list(vec![])]))
     );
     assert_eq!(
         read_str("((()))"),
-        Ok(MalType::List(vec![MalType::List(vec![MalType::List(
-            vec![]
-        )])]))
+        Ok(MalType::new_list(vec![MalType::new_list(vec![
+            MalType::new_list(vec![])
+        ])]))
     );
     assert_eq!(
         read_str("[1 2 3]"),
-        Ok(MalType::Vector(vec![
+        Ok(MalType::new_vec(vec![
             MalType::Integer(1),
             MalType::Integer(2),
             MalType::Integer(3),
@@ -352,14 +352,14 @@ fn test_read_str() {
     );
     let mut map = HashMap::new();
     map.insert("a".to_string(), MalType::Integer(100));
-    assert_eq!(read_str("{\"a\" 100}"), Ok(MalType::Map(map)));
+    assert_eq!(read_str("{\"a\" 100}"), Ok(MalType::new_map(map)));
     assert_eq!(read_str("-100"), Ok(MalType::Integer(-100)));
     assert_eq!(read_str("+100"), Ok(MalType::Integer(100)));
     assert_eq!(read_str("true"), Ok(MalType::Boolean(true)));
     assert_eq!(read_str("false"), Ok(MalType::Boolean(false)));
     assert_eq!(
         read_str("(1 2 3 42 64 128)"),
-        Ok(MalType::List(vec![
+        Ok(MalType::new_list(vec![
             MalType::Integer(1),
             MalType::Integer(2),
             MalType::Integer(3),
@@ -370,11 +370,11 @@ fn test_read_str() {
     );
     assert_eq!(
         read_str("(defun inc (x) (+ x 1))"),
-        Ok(MalType::List(vec![
+        Ok(MalType::new_list(vec![
             MalType::Symbol("defun".to_string()),
             MalType::Symbol("inc".to_string()),
-            MalType::List(vec![MalType::Symbol("x".to_string())]),
-            MalType::List(vec![
+            MalType::new_list(vec![MalType::Symbol("x".to_string())]),
+            MalType::new_list(vec![
                 MalType::Symbol("+".to_string()),
                 MalType::Symbol("x".to_string()),
                 MalType::Integer(1),

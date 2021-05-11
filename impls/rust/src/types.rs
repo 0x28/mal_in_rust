@@ -10,11 +10,11 @@ use crate::{env::EnvRef, reader::ReaderError};
 #[derive(Clone, Debug)]
 pub enum MalType {
     Nil,
-    List(Vec<MalType>),
-    Vector(Vec<MalType>),
-    Map(HashMap<String, MalType>),
-    Fn(InternalFn),
-    FnUser(Rc<UserFn>),
+    List(Vec<MalType>, MalMeta),
+    Vector(Vec<MalType>, MalMeta),
+    Map(HashMap<String, MalType>, MalMeta),
+    Fn(InternalFn, MalMeta),
+    FnUser(Rc<UserFn>, MalMeta),
     Integer(i64),
     Symbol(String),
     String(String),
@@ -22,11 +22,33 @@ pub enum MalType {
     Atom(MalAtom),
 }
 
+type MalMeta = Rc<MalType>;
+
 impl MalType {
     pub const KEYWORD_SYMBOL: char = '\u{29E}';
 
     pub fn is_keyword(value: &str) -> bool {
         value.starts_with(MalType::KEYWORD_SYMBOL)
+    }
+
+    pub fn new_list(list: Vec<MalType>) -> MalType {
+        MalType::List(list, Rc::new(MalType::Nil))
+    }
+
+    pub fn new_vec(vec: Vec<MalType>) -> MalType {
+        MalType::Vector(vec, Rc::new(MalType::Nil))
+    }
+
+    pub fn new_map(map: HashMap<String, MalType>) -> MalType {
+        MalType::Map(map, Rc::new(MalType::Nil))
+    }
+
+    pub fn new_fn(fun: InternalFn) -> MalType {
+        MalType::Fn(fun, Rc::new(MalType::Nil))
+    }
+
+    pub fn new_user_fn(fun: Rc<UserFn>) -> MalType {
+        MalType::FnUser(fun, Rc::new(MalType::Nil))
     }
 }
 
@@ -34,16 +56,16 @@ impl PartialEq for MalType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (MalType::Nil, MalType::Nil) => true,
-            (MalType::List(l), MalType::List(r)) => l == r,
-            (MalType::Vector(l), MalType::Vector(r)) => l == r,
-            (MalType::Map(l), MalType::Map(r)) => l == r,
-            (MalType::Fn(l), MalType::Fn(r)) => l == r,
+            (MalType::List(l, _), MalType::List(r, _)) => l == r,
+            (MalType::Vector(l, _), MalType::Vector(r, _)) => l == r,
+            (MalType::Map(l, _), MalType::Map(r, _)) => l == r,
+            (MalType::Fn(l, _), MalType::Fn(r, _)) => l == r,
             (MalType::Integer(l), MalType::Integer(r)) => l == r,
             (MalType::Symbol(l), MalType::Symbol(r)) => l == r,
             (MalType::String(l), MalType::String(r)) => l == r,
             (MalType::Boolean(l), MalType::Boolean(r)) => l == r,
-            (MalType::List(l), MalType::Vector(r)) => l == r,
-            (MalType::Vector(l), MalType::List(r)) => l == r,
+            (MalType::List(l, _), MalType::Vector(r, _)) => l == r,
+            (MalType::Vector(l, _), MalType::List(r, _)) => l == r,
             _ => false,
         }
     }

@@ -25,25 +25,25 @@ fn eval_ast(ast: MalType, env: &Env) -> Result<MalType, EvalError> {
             })?;
             Ok(value.clone())
         }
-        MalType::List(list) => {
+        MalType::List(list, _) => {
             let evaluated: Result<Vec<_>, _> =
                 list.into_iter().map(|e| eval(e, env)).collect();
 
-            Ok(MalType::List(evaluated?))
+            Ok(MalType::new_list(evaluated?))
         }
-        MalType::Vector(vec) => {
+        MalType::Vector(vec, _) => {
             let evaluated: Result<Vec<_>, _> =
                 vec.into_iter().map(|e| eval(e, env)).collect();
 
-            Ok(MalType::Vector(evaluated?))
+            Ok(MalType::new_vec(evaluated?))
         }
-        MalType::Map(map) => {
+        MalType::Map(map, _) => {
             let evaluated: Result<HashMap<_, _>, _> = map
                 .into_iter()
                 .map(|(key, val)| Ok((key, eval(val, env)?)))
                 .collect();
 
-            Ok(MalType::Map(evaluated?))
+            Ok(MalType::new_map(evaluated?))
         }
         _ => Ok(ast),
     }
@@ -51,16 +51,16 @@ fn eval_ast(ast: MalType, env: &Env) -> Result<MalType, EvalError> {
 
 fn apply(func: &MalType, args: &[MalType]) -> Result<MalType, EvalError> {
     match func {
-        MalType::Fn(f) => f.0(args),
+        MalType::Fn(f, _) => f.0(args),
         _ => Err(EvalError::ExpectedFunction(format!("{}", func))),
     }
 }
 
 fn eval(ast: MalType, env: &Env) -> Result<MalType, EvalError> {
     match ast {
-        MalType::List(ref list) if list.is_empty() => Ok(ast),
-        list @ MalType::List(_) => {
-            if let MalType::List(call) = eval_ast(list, env)? {
+        MalType::List(ref list, _) if list.is_empty() => Ok(ast),
+        list @ MalType::List(_, _) => {
+            if let MalType::List(call, _) = eval_ast(list, env)? {
                 apply(&call[0], &call[1..])
             } else {
                 panic!("Eval of a list didn't result in a list!")
@@ -96,10 +96,10 @@ fn main() {
     let stdin = io::stdin();
     let mut env = HashMap::new();
 
-    env.insert("+".to_string(), MalType::Fn(InternalFn(Rc::new(plus))));
-    env.insert("*".to_string(), MalType::Fn(InternalFn(Rc::new(mul))));
-    env.insert("-".to_string(), MalType::Fn(InternalFn(Rc::new(minus))));
-    env.insert("/".to_string(), MalType::Fn(InternalFn(Rc::new(div))));
+    env.insert("+".to_string(), MalType::new_fn(InternalFn(Rc::new(plus))));
+    env.insert("*".to_string(), MalType::new_fn(InternalFn(Rc::new(mul))));
+    env.insert("-".to_string(), MalType::new_fn(InternalFn(Rc::new(minus))));
+    env.insert("/".to_string(), MalType::new_fn(InternalFn(Rc::new(div))));
 
     prompt();
     for line in stdin.lock().lines() {

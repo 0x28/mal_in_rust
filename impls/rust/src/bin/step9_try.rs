@@ -21,25 +21,25 @@ fn read(input: &str) -> Option<MalType> {
 fn eval_ast(ast: MalType, env: EnvRef) -> Result<MalType, EvalError> {
     match ast {
         MalType::Symbol(symbol) => Ok(env.get(&symbol)?),
-        MalType::List(list) => {
+        MalType::List(list, _) => {
             let evaluated: Result<Vec<_>, _> =
                 list.into_iter().map(|e| eval(e, Rc::clone(&env))).collect();
 
-            Ok(MalType::List(evaluated?))
+            Ok(MalType::new_list(evaluated?))
         }
-        MalType::Vector(vec) => {
+        MalType::Vector(vec, _) => {
             let evaluated: Result<Vec<_>, _> =
                 vec.into_iter().map(|e| eval(e, Rc::clone(&env))).collect();
 
-            Ok(MalType::Vector(evaluated?))
+            Ok(MalType::new_vec(evaluated?))
         }
-        MalType::Map(map) => {
+        MalType::Map(map, _) => {
             let evaluated: Result<HashMap<_, _>, _> = map
                 .into_iter()
                 .map(|(key, val)| Ok((key, eval(val, Rc::clone(&env))?)))
                 .collect();
 
-            Ok(MalType::Map(evaluated?))
+            Ok(MalType::new_map(evaluated?))
         }
         _ => Ok(ast),
     }
@@ -64,11 +64,11 @@ fn apply_let(
     let local_env = Rc::new(Env::new(Some(env)));
 
     match &args {
-        &[MalType::List(bindings), _] if bindings.len() % 2 != 0 => {
+        &[MalType::List(bindings, _), _] if bindings.len() % 2 != 0 => {
             Err(EvalError::InvalidLetBinding)
         }
-        &[MalType::List(bindings), body]
-        | &[MalType::Vector(bindings), body] => {
+        &[MalType::List(bindings, _), body]
+        | &[MalType::Vector(bindings, _), body] => {
             for binding in bindings.chunks_exact(2) {
                 if let (MalType::Symbol(sym), expr) = (&binding[0], &binding[1])
                 {
@@ -132,7 +132,7 @@ fn apply_lambda(
     let _name = exprs.remove(0);
 
     let parameters = match parameters {
-        MalType::List(p) | MalType::Vector(p) => p,
+        MalType::List(p, _) | MalType::Vector(p, _) => p,
         _ => return Err(EvalError::InvalidFnBinding),
     };
 
@@ -160,7 +160,7 @@ fn apply_lambda(
     };
 
     let fun = InternalFn(Rc::new(lambda));
-    Ok(MalType::FnUser(Rc::new(UserFn::new(
+    Ok(MalType::new_user_fn(Rc::new(UserFn::new(
         tco_body,
         tco_parameters,
         tco_env,
@@ -184,12 +184,12 @@ fn replace_splice_unquote(list: Vec<MalType>) -> Result<MalType, EvalError> {
 
     for elt in list.into_iter().rev() {
         match elt {
-            MalType::List(list) if list.starts_with(&splice_unquote) => {
+            MalType::List(list, _) if list.starts_with(&splice_unquote) => {
                 if list.len() == 2 {
                     processed_list = vec![
                         concat.clone(),
                         list[1].clone(),
-                        MalType::List(processed_list),
+                        MalType::new_list(processed_list),
                     ];
                 } else {
                     return Err(EvalError::ArityMismatch("splice-unquote", 1));
@@ -199,35 +199,35 @@ fn replace_splice_unquote(list: Vec<MalType>) -> Result<MalType, EvalError> {
                 processed_list = vec![
                     cons.clone(),
                     apply_quasiquote(elt)?,
-                    MalType::List(processed_list),
+                    MalType::new_list(processed_list),
                 ]
             }
         }
     }
 
-    Ok(MalType::List(processed_list))
+    Ok(MalType::new_list(processed_list))
 }
 
 fn apply_quasiquote(ast: MalType) -> Result<MalType, EvalError> {
     let unquote = MalType::Symbol("unquote".to_string());
 
     match ast {
-        MalType::List(list) if list.starts_with(&[unquote]) => {
+        MalType::List(list, _) if list.starts_with(&[unquote]) => {
             if list.len() == 2 {
                 Ok(list[1].clone())
             } else {
                 Err(EvalError::ArityMismatch("unquote", 1))
             }
         }
-        MalType::List(list) => replace_splice_unquote(list),
-        MalType::Vector(vec) => match replace_splice_unquote(vec)? {
-            MalType::List(spliced) => Ok(MalType::List(vec![
+        MalType::List(list, _) => replace_splice_unquote(list),
+        MalType::Vector(vec, _) => match replace_splice_unquote(vec)? {
+            MalType::List(spliced, _) => Ok(MalType::new_list(vec![
                 MalType::Symbol("vec".to_string()),
-                MalType::List(spliced),
+                MalType::new_list(spliced),
             ])),
             _ => unreachable!(),
         },
-        MalType::Map(_) | MalType::Symbol(_) => Ok(MalType::List(vec![
+        MalType::Map(_, _) | MalType::Symbol(_) => Ok(MalType::new_list(vec![
             MalType::Symbol("quote".to_string()),
             ast,
         ])),
@@ -239,9 +239,9 @@ fn apply_defmacro(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
     match &args {
         [MalType::Symbol(name), expr] => {
             let value = match eval(expr.clone(), Rc::clone(&env))? {
-                MalType::FnUser(func) => {
+                MalType::FnUser(func, _) => {
                     func.mark_as_macro();
-                    MalType::FnUser(func)
+                    MalType::new_user_fn(func)
                 }
                 value => value,
             };
@@ -258,7 +258,7 @@ fn is_macro_call(
     env: EnvRef,
 ) -> Option<(Rc<UserFn>, &[MalType])> {
     let list = match ast {
-        MalType::List(list) => list,
+        MalType::List(list, _) => list,
         _ => return None,
     };
 
@@ -268,7 +268,7 @@ fn is_macro_call(
     };
 
     match env.get(sym) {
-        Ok(MalType::FnUser(fun)) if fun.is_macro() => Some((fun, args)),
+        Ok(MalType::FnUser(fun, _)) if fun.is_macro() => Some((fun, args)),
         _ => None,
     }
 }
@@ -296,7 +296,7 @@ fn apply_trycatch(
         Err(err) => MalType::String(format!("{}", err)),
     };
 
-    if let Some(MalType::List(catch)) = args.get(1) {
+    if let Some(MalType::List(catch, _)) = args.get(1) {
         match catch.as_slice() {
             [MalType::Symbol(sym), MalType::Symbol(binding), catch_body]
                 if sym == "catch*" =>
@@ -320,8 +320,8 @@ fn eval(mut ast: MalType, mut env: EnvRef) -> Result<MalType, EvalError> {
     loop {
         ast = macroexpand(ast, Rc::clone(&env))?;
         match ast {
-            MalType::List(ref list) if list.is_empty() => return Ok(ast),
-            MalType::List(list) => match &list[0] {
+            MalType::List(ref list, _) if list.is_empty() => return Ok(ast),
+            MalType::List(list, _) => match &list[0] {
                 MalType::Symbol(sym) if sym == "def!" => {
                     return apply_def(&list[1..], env);
                 }
@@ -370,16 +370,16 @@ fn eval(mut ast: MalType, mut env: EnvRef) -> Result<MalType, EvalError> {
                     return apply_trycatch(&list[1..], Rc::clone(&env))
                 }
                 _ => {
-                    let call = match eval_ast(MalType::List(list), env)? {
-                        MalType::List(c) => c,
+                    let call = match eval_ast(MalType::new_list(list), env)? {
+                        MalType::List(c, _) => c,
                         _ => unreachable!(),
                     };
 
                     match call.as_slice() {
-                        [MalType::Fn(f), args @ ..] => {
+                        [MalType::Fn(f, _), args @ ..] => {
                             return f.0(args);
                         }
-                        [MalType::FnUser(f), args @ ..] => {
+                        [MalType::FnUser(f, _), args @ ..] => {
                             ast = f.ast.clone();
                             env = Rc::new(Env::from_bindings(
                                 Some(Rc::clone(&f.env)),
@@ -430,7 +430,7 @@ fn main() {
     let exit_code;
 
     for (name, func) in NAMESPACE {
-        env.set(name, MalType::Fn(InternalFn(Rc::new(func))));
+        env.set(name, MalType::new_fn(InternalFn(Rc::new(func))));
     }
 
     let eval_env = Rc::clone(&env);
@@ -442,7 +442,7 @@ fn main() {
         }
     };
 
-    env.set("eval", MalType::Fn(InternalFn(Rc::new(eval_func))));
+    env.set("eval", MalType::new_fn(InternalFn(Rc::new(eval_func))));
 
     rep("(def! not (fn* (a) (if a false true)))", Rc::clone(&env));
     rep(
@@ -474,7 +474,7 @@ fn main() {
         [_prog_name, mal_file, argv @ ..] => {
             env.set(
                 "*ARGV*",
-                MalType::List(
+                MalType::new_list(
                     argv.iter()
                         .map(|s| MalType::String(s.to_string()))
                         .collect(),
@@ -482,7 +482,7 @@ fn main() {
             );
             // use eval instead of rep to avoid injection
             let result = eval(
-                MalType::List(vec![
+                MalType::new_list(vec![
                     MalType::Symbol("load-file".to_string()),
                     MalType::String(mal_file.to_string()),
                 ]),
@@ -498,7 +498,7 @@ fn main() {
             }
         }
         _ => {
-            env.set("*ARGV*", MalType::List(vec![]));
+            env.set("*ARGV*", MalType::new_list(vec![]));
 
             prompt();
             for line in stdin.lock().lines() {

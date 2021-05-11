@@ -15,7 +15,7 @@ fn pr_str_internal(
     print_readably: bool,
 ) -> Result<(), std::fmt::Error> {
     match value {
-        MalType::List(list) => {
+        MalType::List(list, _) => {
             write!(
                 writer,
                 "({})",
@@ -25,7 +25,7 @@ fn pr_str_internal(
                     .join(" ")
             )?;
         }
-        MalType::Vector(vector) => {
+        MalType::Vector(vector, _) => {
             write!(
                 writer,
                 "[{}]",
@@ -36,7 +36,7 @@ fn pr_str_internal(
                     .join(" ")
             )?;
         }
-        MalType::Map(map) => {
+        MalType::Map(map, _) => {
             let mut output = vec![];
             for (key, value) in map {
                 output.push(pr_str(
@@ -82,10 +82,10 @@ fn pr_str_internal(
         MalType::Nil => {
             write!(writer, "nil")?;
         }
-        MalType::Fn(f) => {
+        MalType::Fn(f, _) => {
             write!(writer, "{}", f)?;
         }
-        MalType::FnUser(f) => {
+        MalType::FnUser(f, _) => {
             write!(writer, "{}", f)?;
         }
         MalType::Atom(value) => {

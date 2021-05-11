@@ -20,25 +20,25 @@ fn read(input: &str) -> Option<MalType> {
 fn eval_ast(ast: MalType, env: EnvRef) -> Result<MalType, EvalError> {
     match ast {
         MalType::Symbol(symbol) => Ok(env.get(&symbol)?),
-        MalType::List(list) => {
+        MalType::List(list, _) => {
             let evaluated: Result<Vec<_>, _> =
                 list.into_iter().map(|e| eval(e, Rc::clone(&env))).collect();
 
-            Ok(MalType::List(evaluated?))
+            Ok(MalType::new_list(evaluated?))
         }
-        MalType::Vector(vec) => {
+        MalType::Vector(vec, _) => {
             let evaluated: Result<Vec<_>, _> =
                 vec.into_iter().map(|e| eval(e, Rc::clone(&env))).collect();
 
-            Ok(MalType::Vector(evaluated?))
+            Ok(MalType::new_vec(evaluated?))
         }
-        MalType::Map(map) => {
+        MalType::Map(map, _) => {
             let evaluated: Result<HashMap<_, _>, _> = map
                 .into_iter()
                 .map(|(key, val)| Ok((key, eval(val, Rc::clone(&env))?)))
                 .collect();
 
-            Ok(MalType::Map(evaluated?))
+            Ok(MalType::new_map(evaluated?))
         }
         _ => Ok(ast),
     }
@@ -63,11 +63,11 @@ fn apply_let(
     let local_env = Rc::new(Env::new(Some(env)));
 
     match &args {
-        &[MalType::List(bindings), _] if bindings.len() % 2 != 0 => {
+        &[MalType::List(bindings, _), _] if bindings.len() % 2 != 0 => {
             Err(EvalError::InvalidLetBinding)
         }
-        &[MalType::List(bindings), body]
-        | &[MalType::Vector(bindings), body] => {
+        &[MalType::List(bindings, _), body]
+        | &[MalType::Vector(bindings, _), body] => {
             for binding in bindings.chunks_exact(2) {
                 if let (MalType::Symbol(sym), expr) = (&binding[0], &binding[1])
                 {
@@ -131,7 +131,7 @@ fn apply_lambda(
     let _name = exprs.remove(0);
 
     let parameters = match parameters {
-        MalType::List(p) | MalType::Vector(p) => p,
+        MalType::List(p, _) | MalType::Vector(p, _) => p,
         _ => return Err(EvalError::InvalidFnBinding),
     };
 
@@ -159,7 +159,7 @@ fn apply_lambda(
     };
 
     let fun = InternalFn(Rc::new(lambda));
-    Ok(MalType::FnUser(Rc::new(UserFn::new(
+    Ok(MalType::new_user_fn(Rc::new(UserFn::new(
         tco_body,
         tco_parameters,
         tco_env,
@@ -170,8 +170,8 @@ fn apply_lambda(
 fn eval(mut ast: MalType, mut env: EnvRef) -> Result<MalType, EvalError> {
     loop {
         match ast {
-            MalType::List(ref list) if list.is_empty() => return Ok(ast),
-            MalType::List(list) => match &list[0] {
+            MalType::List(ref list, _) if list.is_empty() => return Ok(ast),
+            MalType::List(list, _) => match &list[0] {
                 MalType::Symbol(sym) if sym == "def!" => {
                     return apply_def(&list[1..], env);
                 }
@@ -190,16 +190,16 @@ fn eval(mut ast: MalType, mut env: EnvRef) -> Result<MalType, EvalError> {
                     return apply_lambda(list, env);
                 }
                 _ => {
-                    let call = match eval_ast(MalType::List(list), env)? {
-                        MalType::List(c) => c,
+                    let call = match eval_ast(MalType::new_list(list), env)? {
+                        MalType::List(c, _) => c,
                         _ => unreachable!(),
                     };
 
                     match call.as_slice() {
-                        [MalType::Fn(f), args @ ..] => {
+                        [MalType::Fn(f, _), args @ ..] => {
                             return f.0(args);
                         }
-                        [MalType::FnUser(f), args @ ..] => {
+                        [MalType::FnUser(f, _), args @ ..] => {
                             ast = f.ast.clone();
                             env = Rc::new(Env::from_bindings(
                                 Some(Rc::clone(&f.env)),
@@ -249,7 +249,7 @@ fn main() {
     let env = Rc::new(Env::new(None));
 
     for (name, func) in NAMESPACE {
-        env.set(name, MalType::Fn(InternalFn(Rc::new(func))));
+        env.set(name, MalType::new_fn(InternalFn(Rc::new(func))));
     }
 
     rep("(def! not (fn* (a) (if a false true)))", Rc::clone(&env));

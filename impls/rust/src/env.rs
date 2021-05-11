@@ -47,7 +47,7 @@ impl Env {
                     .zip(exprs.into_iter())
                     .collect();
 
-                data.insert(var_param, MalType::List(var_args));
+                data.insert(var_param, MalType::new_list(var_args));
 
                 let data = Cell::new(data);
 

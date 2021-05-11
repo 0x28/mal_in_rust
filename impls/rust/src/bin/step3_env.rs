@@ -20,25 +20,25 @@ fn read(input: &str) -> Option<MalType> {
 fn eval_ast(ast: MalType, env: EnvRef) -> Result<MalType, EvalError> {
     match ast {
         MalType::Symbol(symbol) => Ok(env.get(&symbol)?),
-        MalType::List(list) => {
+        MalType::List(list, _) => {
             let evaluated: Result<Vec<_>, _> =
                 list.into_iter().map(|e| eval(e, Rc::clone(&env))).collect();
 
-            Ok(MalType::List(evaluated?))
+            Ok(MalType::new_list(evaluated?))
         }
-        MalType::Vector(vec) => {
+        MalType::Vector(vec, _) => {
             let evaluated: Result<Vec<_>, _> =
                 vec.into_iter().map(|e| eval(e, Rc::clone(&env))).collect();
 
-            Ok(MalType::Vector(evaluated?))
+            Ok(MalType::new_vec(evaluated?))
         }
-        MalType::Map(map) => {
+        MalType::Map(map, _) => {
             let evaluated: Result<HashMap<_, _>, _> = map
                 .into_iter()
                 .map(|(key, val)| Ok((key, eval(val, Rc::clone(&env))?)))
                 .collect();
 
-            Ok(MalType::Map(evaluated?))
+            Ok(MalType::new_map(evaluated?))
         }
         _ => Ok(ast),
     }
@@ -46,7 +46,7 @@ fn eval_ast(ast: MalType, env: EnvRef) -> Result<MalType, EvalError> {
 
 fn apply(func: &MalType, args: &[MalType]) -> Result<MalType, EvalError> {
     match func {
-        MalType::Fn(f) => f.0(args),
+        MalType::Fn(f, _) => f.0(args),
         _ => Err(EvalError::ExpectedFunction(format!("{}", func))),
     }
 }
@@ -67,11 +67,11 @@ fn apply_let(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
     let local_env = Rc::new(Env::new(Some(env)));
 
     match &args {
-        &[MalType::List(bindings), _] if bindings.len() % 2 != 0 => {
+        &[MalType::List(bindings, _), _] if bindings.len() % 2 != 0 => {
             Err(EvalError::InvalidLetBinding)
         }
-        &[MalType::List(bindings), body]
-        | &[MalType::Vector(bindings), body] => {
+        &[MalType::List(bindings, _), body]
+        | &[MalType::Vector(bindings, _), body] => {
             for binding in bindings.chunks_exact(2) {
                 if let (MalType::Symbol(sym), expr) = (&binding[0], &binding[1])
                 {
@@ -89,12 +89,13 @@ fn apply_let(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
 
 fn eval(ast: MalType, env: EnvRef) -> Result<MalType, EvalError> {
     match ast {
-        MalType::List(ref list) if list.is_empty() => Ok(ast),
-        MalType::List(list) => match &list[0] {
+        MalType::List(ref list, _) if list.is_empty() => Ok(ast),
+        MalType::List(list, _) => match &list[0] {
             MalType::Symbol(sym) if sym == "def!" => apply_def(&list[1..], env),
             MalType::Symbol(sym) if sym == "let*" => apply_let(&list[1..], env),
             _ => {
-                if let MalType::List(call) = eval_ast(MalType::List(list), env)?
+                if let MalType::List(call, _) =
+                    eval_ast(MalType::new_list(list), env)?
                 {
                     apply(&call[0], &call[1..])
                 } else {
@@ -132,10 +133,10 @@ fn main() {
     let stdin = io::stdin();
     let env = Rc::new(Env::new(None));
 
-    env.set("+", MalType::Fn(InternalFn(Rc::new(plus))));
-    env.set("*", MalType::Fn(InternalFn(Rc::new(mul))));
-    env.set("-", MalType::Fn(InternalFn(Rc::new(minus))));
-    env.set("/", MalType::Fn(InternalFn(Rc::new(div))));
+    env.set("+", MalType::new_fn(InternalFn(Rc::new(plus))));
+    env.set("*", MalType::new_fn(InternalFn(Rc::new(mul))));
+    env.set("-", MalType::new_fn(InternalFn(Rc::new(minus))));
+    env.set("/", MalType::new_fn(InternalFn(Rc::new(div))));
 
     prompt();
     for line in stdin.lock().lines() {
