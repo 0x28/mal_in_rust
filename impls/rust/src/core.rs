@@ -1,7 +1,7 @@
 use std::fs;
 use std::io;
 use std::{cmp::Ordering, io::Write, path::PathBuf};
-use std::collections::HashMap;
+use std::{collections::HashMap, rc::Rc};
 
 use crate::reader;
 use crate::{printer, types::MalAtom};
@@ -344,9 +344,9 @@ fn first(args: &[MalType]) -> Result<MalType, EvalError> {
 fn rest(args: &[MalType]) -> Result<MalType, EvalError> {
     match args {
         [MalType::Nil] => Ok(MalType::new_list(vec![])),
-        [MalType::List(elements, _)] | [MalType::Vector(elements, _)] => {
-            Ok(MalType::new_list(elements.iter().skip(1).cloned().collect()))
-        }
+        [MalType::List(elements, _)] | [MalType::Vector(elements, _)] => Ok(
+            MalType::new_list(elements.iter().skip(1).cloned().collect()),
+        ),
         [_] => Err(EvalError::TypeMismatch("rest", "list | vector")),
         _ => Err(EvalError::ArityMismatch("rest", 1)),
     }
@@ -583,6 +583,55 @@ fn readline(args: &[MalType]) -> Result<MalType, EvalError> {
     }
 }
 
+fn meta(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::Fn(_, meta)]
+        | [MalType::FnUser(_, meta)]
+        | [MalType::List(_, meta)]
+        | [MalType::Vector(_, meta)]
+        | [MalType::Map(_, meta)] => Ok(meta.as_ref().clone()),
+        [_, _] => Err(EvalError::TypeMismatch(
+            "meta",
+            "function | list | vector | map",
+        )),
+        _ => Err(EvalError::ArityMismatch("meta", 2)),
+    }
+}
+
+fn with_meta(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::Fn(fun, _), meta] => {
+            Ok(MalType::Fn(fun.clone(), Rc::new(meta.clone())))
+        }
+        [MalType::FnUser(fun, _), meta] => {
+            Ok(MalType::FnUser(fun.clone(), Rc::new(meta.clone())))
+        }
+        [MalType::List(list, _), meta] => {
+            Ok(MalType::List(list.clone(), Rc::new(meta.clone())))
+        }
+        [MalType::Vector(vec, _), meta] => {
+            Ok(MalType::Vector(vec.clone(), Rc::new(meta.clone())))
+        }
+        [MalType::Map(map, _), meta] => {
+            Ok(MalType::Map(map.clone(), Rc::new(meta.clone())))
+        }
+        [_, _] => Err(EvalError::TypeMismatch(
+            "with-meta",
+            "function | list | vector | map",
+        )),
+        _ => Err(EvalError::ArityMismatch("with-meta", 2)),
+    }
+}
+
+fn is_function(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::Fn(_, _)] => Ok(MalType::Boolean(true)),
+        [MalType::FnUser(fun, _)] => Ok(MalType::Boolean(!fun.is_macro())),
+        [_] => Ok(MalType::Boolean(false)),
+        _ => Err(EvalError::ArityMismatch("function?", 1)),
+    }
+}
+
 fn not_implemented(_args: &[MalType]) -> Result<MalType, EvalError> {
     Err(EvalError::MalException(MalType::String(
         "not implemented!".to_string(),
@@ -590,6 +639,11 @@ fn not_implemented(_args: &[MalType]) -> Result<MalType, EvalError> {
 }
 
 mal_predicate!(MalType::Nil, is_nil, "nil?");
+mal_predicate!(
+    MalType::String(s) if !MalType::is_keyword(s),
+    is_string,
+    "string?");
+mal_predicate!(MalType::Integer(_), is_number, "number?");
 mal_predicate!(MalType::Boolean(true), is_true, "true?");
 mal_predicate!(MalType::Boolean(false), is_false, "false?");
 mal_predicate!(MalType::Symbol(_), is_symbol, "symbol?");
@@ -605,6 +659,7 @@ mal_predicate!(
     is_keyword,
     "keyword?"
 );
+mal_predicate!(MalType::FnUser(fun, _) if fun.is_macro(), is_macro, "macro?");
 
 type Namespace =
     &'static [(&'static str, fn(&[MalType]) -> Result<MalType, EvalError>)];
@@ -663,11 +718,12 @@ pub const NAMESPACE: Namespace = &[
     ("vals", vals),
     ("readline", readline),
     ("time-ms", not_implemented),
-    ("meta", not_implemented),
-    ("with-meta", not_implemented),
-    ("fn?", not_implemented),
-    ("string?", not_implemented),
-    ("number?", not_implemented),
+    ("meta", meta),
+    ("with-meta", with_meta),
+    ("fn?", is_function),
+    ("macro?", is_macro),
+    ("string?", is_string),
+    ("number?", is_number),
     ("seq", not_implemented),
     ("conj", not_implemented),
 ];

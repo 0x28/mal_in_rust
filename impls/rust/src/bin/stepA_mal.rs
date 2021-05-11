@@ -242,8 +242,9 @@ fn apply_defmacro(args: &[MalType], env: EnvRef) -> Result<MalType, EvalError> {
         [MalType::Symbol(name), expr] => {
             let value = match eval(expr.clone(), Rc::clone(&env))? {
                 MalType::FnUser(func, _) => {
-                    func.mark_as_macro();
-                    MalType::new_user_fn(func)
+                    let newfun = func.as_ref().clone();
+                    newfun.mark_as_macro();
+                    MalType::new_user_fn(Rc::new(newfun))
                 }
                 value => value,
             };
