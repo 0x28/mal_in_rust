@@ -1,7 +1,7 @@
-use std::fs;
 use std::io;
 use std::{cmp::Ordering, io::Write, path::PathBuf};
 use std::{collections::HashMap, rc::Rc};
+use std::{fs, time::SystemTime};
 
 use crate::reader;
 use crate::{printer, types::MalAtom};
@@ -632,10 +632,65 @@ fn is_function(args: &[MalType]) -> Result<MalType, EvalError> {
     }
 }
 
-fn not_implemented(_args: &[MalType]) -> Result<MalType, EvalError> {
-    Err(EvalError::MalException(MalType::String(
-        "not implemented!".to_string(),
-    )))
+fn conj(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::List(list, _), first, rest @ ..] => {
+            let mut created_list = vec![];
+            for element in rest.iter().rev() {
+                created_list.push(element.clone());
+            }
+            created_list.push(first.clone());
+            created_list.extend_from_slice(list);
+
+            Ok(MalType::new_list(created_list))
+        }
+        [MalType::Vector(vec, _), first, rest @ ..] => {
+            let mut created_vec = vec.clone();
+            created_vec.push(first.clone());
+            created_vec.extend_from_slice(rest);
+
+            Ok(MalType::new_vec(created_vec))
+        }
+        [_, _] => Err(EvalError::TypeMismatchMultiple(
+            "conj",
+            vec!["list | vector", "any", "any..."],
+        )),
+        _ => Err(EvalError::ArityMismatchRange("conj", 2, usize::MAX)),
+    }
+}
+
+fn seq(args: &[MalType]) -> Result<MalType, EvalError> {
+    match args {
+        [MalType::List(value, _)] | [MalType::Vector(value, _)]
+            if value.is_empty() =>
+        {
+            Ok(MalType::Nil)
+        }
+        [list @ MalType::List(_, _)] => Ok(list.clone()),
+        [MalType::Vector(vec, _)] => Ok(MalType::new_list(vec.clone())),
+        [MalType::Nil] => Ok(MalType::Nil),
+        [MalType::String(s)] if s.is_empty() => Ok(MalType::Nil),
+        [MalType::String(s)] => Ok(MalType::new_list(
+            s.chars()
+                .map(|c| MalType::String(format!("{}", c)))
+                .collect(),
+        )),
+        [_] => Err(EvalError::TypeMismatch("seq", "list | vector | string")),
+        _ => Err(EvalError::ArityMismatch("seq", 1)),
+    }
+}
+
+fn time_ms(args: &[MalType]) -> Result<MalType, EvalError> {
+    if args.is_empty() {
+        Ok(MalType::Integer(
+            SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .expect("system time error")
+                .as_millis() as i64,
+        ))
+    } else {
+        Err(EvalError::ArityMismatch("time-ms", 0))
+    }
 }
 
 mal_predicate!(MalType::Nil, is_nil, "nil?");
@@ -717,13 +772,13 @@ pub const NAMESPACE: Namespace = &[
     ("keys", keys),
     ("vals", vals),
     ("readline", readline),
-    ("time-ms", not_implemented),
+    ("time-ms", time_ms),
     ("meta", meta),
     ("with-meta", with_meta),
     ("fn?", is_function),
     ("macro?", is_macro),
     ("string?", is_string),
     ("number?", is_number),
-    ("seq", not_implemented),
-    ("conj", not_implemented),
+    ("seq", seq),
+    ("conj", conj),
 ];
