@@ -4,6 +4,9 @@
 
 ## Description
 
+This is my implementation of Make a Lisp in Rust. The original project can be found here:
+[kanaka/mal](https://github.com/kanaka/mal)
+
 **1. Mal is a Clojure inspired Lisp interpreter**
 
 **2. Mal is a learning tool**
